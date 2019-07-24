@@ -1,0 +1,21 @@
+[package]
+name = "kg-lang"
+version = "0.1.0"
+authors = ["jchlapinski <jakub.chlapinski@kodegenix.pl>"]
+description = """
+Runtime LR(1) parser generator library.
+"""
+readme = "README.md"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/kodegenix/kg-lang"
+edition = "2018"
+
+[workspace]
+
+[dependencies]
+kg-diag = "0.2.1"
+kg-js = "0.1.0"
+kg-tree = "0.1.4"
+kg-utils = "0.3.0"
+log = "0.4.7"
+libc = "0.2.60"
