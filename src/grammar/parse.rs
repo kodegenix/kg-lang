@@ -355,9 +355,9 @@ struct ParseToken {
 impl ParseToken {
     fn new(term: ParseTerminal, from: Position, to: Position) -> ParseToken {
         ParseToken {
-            term: term,
-            from: from,
-            to: to,
+            term,
+            from,
+            to,
         }
     }
 }
