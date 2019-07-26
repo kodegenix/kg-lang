@@ -151,7 +151,7 @@ impl CallJs for JsRuntimeContext {
 
 
 pub struct JsRuntime {
-    grammar: Rc<RefCell<Grammar>>,
+    grammar: GrammarRef,
     engine: Engine,
     lexers: Vec<Box<dyn Lexer>>,
     parsers: Vec<Box<dyn Parser>>,
@@ -159,7 +159,7 @@ pub struct JsRuntime {
 }
 
 impl JsRuntime {
-    pub fn new(grammar: &Rc<RefCell<Grammar>>) -> Result<JsRuntime, Error> {
+    pub fn new(grammar: &GrammarRef) -> Result<JsRuntime, Error> {
         let g = grammar.borrow();
         let mut r = JsRuntime {
             grammar: grammar.clone(),

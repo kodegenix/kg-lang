@@ -36,8 +36,8 @@ impl From<regex::Error> for Error {
     }
 }
 
-pub fn parse(r: &mut dyn CharReader) -> Result<Rc<RefCell<Grammar>>, Error> {
-    let g: Rc<RefCell<Grammar>> = Rc::new(RefCell::new(Grammar::new()));
+pub fn parse(r: &mut dyn CharReader) -> Result<GrammarRef, Error> {
+    let g = GrammarRef::new();
 
     let mut p = Parser::new();
 
@@ -68,7 +68,7 @@ pub fn parse(r: &mut dyn CharReader) -> Result<Rc<RefCell<Grammar>>, Error> {
         rules.push(r0);
     }
 
-    fn add_terminal<'a>(id: &'a str, regex: Regex, terminals: &'a mut Vec<Lexeme>, g: &'a Rc<RefCell<Grammar>>) -> Result<&'a mut Lexeme, Error> {
+    fn add_terminal<'a>(id: &'a str, regex: Regex, terminals: &'a mut Vec<Lexeme>, g: &'a GrammarRef) -> Result<&'a mut Lexeme, Error> {
         let mut index = ::std::usize::MAX;
         let tid: Cow<'a, str> = if id.is_empty() {
             Cow::Owned(match regex {
@@ -104,7 +104,7 @@ pub fn parse(r: &mut dyn CharReader) -> Result<Rc<RefCell<Grammar>>, Error> {
         Ok(&mut terminals[index])
     }
 
-    fn add_production<'a>(id: String, productions: &'a mut Vec<Production>, g: &'a Rc<RefCell<Grammar>>) -> Result<&'a mut Production, Error> {
+    fn add_production<'a>(id: String, productions: &'a mut Vec<Production>, g: &'a GrammarRef) -> Result<&'a mut Production, Error> {
         let mut index = ::std::usize::MAX;
         for p in productions.iter_mut() {
             if p.id == id {

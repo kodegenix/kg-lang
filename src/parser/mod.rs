@@ -1,9 +1,9 @@
 use super::*;
 
 pub mod clr;
-pub mod glr;
 
 
+//FIXME (jc)
 #[derive(Debug)]
 pub enum ParserError {
     Unspecified(u32),

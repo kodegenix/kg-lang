@@ -2,7 +2,7 @@
 extern crate log;
 
 use std::rc::{Rc, Weak};
-use std::cell::{Cell, RefCell, Ref};
+use std::cell::{Cell, RefCell, Ref, RefMut};
 use std::borrow::Cow;
 use std::ops::{Deref, DerefMut};
 use std::cmp::Ordering;

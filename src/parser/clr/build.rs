@@ -236,13 +236,13 @@ impl Item {
         if rule.symbols().len() == position {
             Item {
                 rule: rule.index(),
-                position: position,
+                position,
                 lookaheads: grammar.production(rule.production()).follow.borrow().clone(),
             }
         } else {
             Item {
                 rule: rule.index(),
-                position: position,
+                position,
                 lookaheads: OrdSet::new(),
             }
         }
@@ -260,7 +260,7 @@ struct ItemSet {
 impl ItemSet {
     fn new(symbol: Symbol) -> ItemSet {
         ItemSet {
-            symbol: symbol,
+            symbol,
             kernel: OrdSet::with_capacity(128),
             closure: OrdSet::with_capacity(128),
         }
@@ -519,8 +519,8 @@ struct StateDisp<'a> {
 impl<'a> StateDisp<'a> {
     fn new(state: &'a State, grammar: &'a Grammar) -> StateDisp<'a> {
         StateDisp {
-            state: state,
-            grammar: grammar,
+            state,
+            grammar,
         }
     }
 }
@@ -587,9 +587,9 @@ struct ItemDisp<'a> {
 impl<'a> ItemDisp<'a> {
     fn new(item: &'a Item, grammar: &'a Grammar, kernel: bool) -> ItemDisp<'a> {
         ItemDisp {
-            item: item,
-            grammar: grammar,
-            kernel: kernel,
+            item,
+            grammar,
+            kernel,
         }
     }
 }
@@ -640,7 +640,7 @@ impl<'a> ItemSetDisp<'a> {
         items.extend(itemset.closure.iter().map(|i| ItemDisp::new(i, grammar, false)));
         items.sort_by(|a, b| a.item.cmp(&b.item));
 
-        ItemSetDisp { items: items }
+        ItemSetDisp { items }
     }
 }
 

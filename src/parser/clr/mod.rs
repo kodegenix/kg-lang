@@ -18,8 +18,8 @@ struct ActionEdge {
 impl ActionEdge {
     fn new(terminal: usize, action: Action) -> ActionEdge {
         ActionEdge {
-            terminal: terminal,
-            action: action,
+            terminal,
+            action,
         }
     }
 }
@@ -34,8 +34,8 @@ struct GotoEdge {
 impl GotoEdge {
     fn new(production: usize, state: usize) -> GotoEdge {
         GotoEdge {
-            production: production,
-            state: state,
+            production,
+            state,
         }
     }
 }
@@ -51,7 +51,7 @@ struct State {
 impl State {
     fn new(index: usize) -> State {
         State {
-            index: index,
+            index,
             actions: OrdSet::new(),
             gotos: OrdSet::new(),
         }
@@ -60,23 +60,23 @@ impl State {
 
 #[derive(Debug)]
 pub struct ClrParser {
-    grammar: Rc<RefCell<Grammar>>,
+    grammar: GrammarRef,
     states: Vec<State>,
     stack: Vec<usize>,
     channel: usize,
 }
 
 impl ClrParser {
-    pub fn build(grammar: &Rc<RefCell<Grammar>>, channel: usize) -> Result<ClrParser, Error> {
+    pub fn build(grammar: &GrammarRef, channel: usize) -> Result<ClrParser, Error> {
         build::build(ClrParser::new(grammar, channel)).map_err(|_| Error::Unspecified(line!()))
     }
 
-    fn new(grammar: &Rc<RefCell<Grammar>>, channel: usize) -> ClrParser {
+    fn new(grammar: &GrammarRef, channel: usize) -> ClrParser {
         ClrParser {
             grammar: grammar.clone(),
             states: Vec::new(),
             stack: Vec::new(),
-            channel: channel,
+            channel,
         }
     }
 
@@ -94,16 +94,12 @@ impl ClrParser {
 }
 
 impl Parser for ClrParser {
-    fn channel(&self) -> usize {
-        self.channel
-    }
-
     fn reset(&mut self) {
         self.stack.clear();
         self.stack.push(0);
     }
 
-    //FIXME (jc) multi.rs handling
+    //FIXME (jc) error handling
     fn parse(&mut self, token: &Token) -> Result<Step, ParserError> {
         if let Some(a) = self.find_action_edge(token.lexeme()) {
             match a.action {
@@ -135,5 +131,9 @@ impl Parser for ClrParser {
             println!("{:?}", token);
             unreachable!();
         }
+    }
+
+    fn channel(&self) -> usize {
+        self.channel
     }
 }
