@@ -3,7 +3,7 @@
 [![Latest Version](https://img.shields.io/crates/v/kg-lang.svg)](https://crates.io/crates/kg-lang)
 [![Documentation](https://docs.rs/kg-lang/badge.svg)](https://docs.rs/kg-lang)
 [![Build Status](https://travis-ci.org/kodegenix/kg-lang.svg?branch=master)](https://travis-ci.org/kodegenix/kg-lang)
-[![Coverage Status](https://coveralls.io/repos/github/kodegenix/kg-lang/badge.svg?branch=master)](https://coveralls.io/github/kodegenix/kg-lang?branch=master)
+[![codecov](https://codecov.io/gh/kodegenix/kg-lang/branch/master/graph/badge.svg)](https://codecov.io/gh/kodegenix/kg-lang)
 
 Runtime LR(1) parser generator library.
 
