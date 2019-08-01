@@ -108,11 +108,11 @@ impl<'a> GrammarExt<'a> {
                     match *s {
                         Symbol::Terminal(t) => {
                             if nullable {
-                                changed |= production.first.borrow_mut().insert(t);
+                                changed |= production.first.borrow_mut().insert(t).is_none();
                             }
                             nullable = false;
                             if prev_p > 0 {
-                                changed |= self.production(prev_p).follow.borrow_mut().insert(t);
+                                changed |= self.production(prev_p).follow.borrow_mut().insert(t).is_none();
                             }
                             prev_p = 0;
                         }
@@ -315,9 +315,9 @@ impl ItemSet {
         if self.contains(&item) {
             false
         } else if kernel {
-            self.kernel.insert(item)
+            self.kernel.insert(item).is_none()
         } else {
-            self.closure.insert(item)
+            self.closure.insert(item).is_none()
         }
     }
 

@@ -308,7 +308,7 @@ impl JsRuntime {
                 }
             }
         }
-        debug!("{}", code);
+
         self.engine.eval("parse.js", &code);
         self.engine.get_global_string("parser");
 
