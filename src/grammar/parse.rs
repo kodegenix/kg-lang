@@ -29,6 +29,13 @@ impl From<ParseDiag> for Error {
     }
 }
 
+//FIXME (jc)
+impl From<IoErrorDetail> for Error {
+    fn from(_: IoErrorDetail) -> Error {
+        Error::IoError
+    }
+}
+
 impl From<regex::Error> for Error {
     fn from(err: regex::Error) -> Error {
         error!("{:?}", err);
@@ -370,7 +377,7 @@ fn skip_ws(r: &mut dyn CharReader, allow_nested_comments: bool) -> Result<bool, 
         if c == '/' {
             if let Some(c) = r.peek_char(1)? {
                 if level == 0 && c == '/' {
-                    r.skip_until(&|c| c == '\n')?;
+                    r.skip_until(&mut |c| c == '\n')?;
                     skipped = true;
                 } else if c == '*' {
                     r.skip_chars(2)?;
@@ -563,7 +570,7 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
         Some('%') => {
             let p1 = r.position();
             r.next_char()?;
-            r.skip_while(&|c| c.is_alphanumeric())?;
+            r.skip_while(&mut |c| c.is_alphanumeric())?;
             let p2 = r.position();
             let d = r.slice(p1.offset, p2.offset)?;
             match d.as_ref() {
@@ -579,7 +586,7 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
         }
         Some(c) if c.is_alphabetic() => {
             let p1 = r.position();
-            r.skip_while(&|c| c.is_alphanumeric() || c == '_')?;
+            r.skip_while(&mut |c| c.is_alphanumeric() || c == '_')?;
             let p2 = r.position();
             Ok(ParseToken::new(ParseTerminal::Id(c.is_uppercase()), p1, p2))
         }
@@ -587,7 +594,7 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
             let p1 = r.position();
             if let Some(c) = r.next_char()? {
                 if c.is_alphabetic() {
-                    r.skip_while(&|c| c.is_alphanumeric() || c == '_')?;
+                    r.skip_while(&mut |c| c.is_alphanumeric() || c == '_')?;
                     let p2 = r.position();
                     Ok(ParseToken::new(ParseTerminal::Var(c.is_uppercase()), p1, p2))
                 } else {
@@ -641,7 +648,7 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
         }
         Some(c) if c.is_digit(10) => {
             let p1 = r.position();
-            r.scan(&|c| c.is_digit(10))?;
+            r.scan(&mut |c| c.is_digit(10))?;
             let p2 = r.position();
             Ok(ParseToken::new(ParseTerminal::Int, p1, p2))
         }

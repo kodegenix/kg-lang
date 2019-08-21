@@ -17,6 +17,12 @@ impl From<ParseDiag> for LexerError {
     }
 }
 
+//FIXME (jc)
+impl From<IoErrorDetail> for LexerError {
+    fn from(_: IoErrorDetail) -> LexerError {
+        LexerError::IoError
+    }
+}
 
 
 #[derive(Debug, Clone)]

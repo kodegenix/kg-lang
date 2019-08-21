@@ -1,4 +1,4 @@
-use kg_diag::{CharReader, MemCharReader, ParseDiag};
+use kg_diag::{CharReader, MemCharReader, ParseDiag, IoErrorDetail};
 
 use super::*;
 use super::Regex::*;
@@ -15,6 +15,11 @@ impl From<ParseDiag> for Error {
     }
 }
 
+impl From<IoErrorDetail> for Error {
+    fn from(_: IoErrorDetail) -> Error {
+        Error::IoError
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 struct Flags {
