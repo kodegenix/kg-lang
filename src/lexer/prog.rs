@@ -1,6 +1,7 @@
 use super::*;
 
 use kg_utils::collections::SparseSet;
+use kg_diag::parse::ParseResult;
 
 
 const EMPTY_GOTO: u32 = ::std::u32::MAX;
