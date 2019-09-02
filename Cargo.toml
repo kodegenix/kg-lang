@@ -13,7 +13,7 @@ edition = "2018"
 [workspace]
 
 [dependencies]
-kg-diag = "0.2.7"
+kg-diag = "0.3.0"
 kg-js = "0.1.1"
 kg-tree = "0.1.7"
 kg-utils = "0.3.1"
