@@ -411,12 +411,10 @@ impl JsRuntime {
                 token = self.current_lexer_mut().lex(reader)?;
                 token.set_mode(self.context.mode);
                 token.set_channel(self.context.channel);
-                println!("  lexed token: {}", token);
             } else {
                 token = self.context.token_input_queue.pop_front().unwrap();
                 token.set_mode(self.context.mode);
                 token.set_channel(self.context.channel);
-                println!(" queued token: {}", token);
             };
 
             match self.process_token(&mut token)? {
@@ -438,7 +436,6 @@ impl JsRuntime {
             }
         }
 
-        println!("parsing token: {}", token);
         Ok(token)
     }
 

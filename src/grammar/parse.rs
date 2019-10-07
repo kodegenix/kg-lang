@@ -50,11 +50,6 @@ pub fn parse(r: &mut dyn CharReader) -> Result<GrammarRef, Error> {
 
     let mut pg = p.parse(r)?;
 
-//    println!("{:#?}", pg);
-//    for (i, t) in p.tokens.iter().enumerate() {
-//        println!("{:3} -> {:?}", i, t);
-//    }
-
     let mut modes: Vec<Mode> = Vec::with_capacity(32);
     let mut channels: Vec<Channel> = Vec::with_capacity(32);
     let mut terminals: Vec<Lexeme> = Vec::with_capacity(128);
@@ -207,7 +202,6 @@ pub fn parse(r: &mut dyn CharReader) -> Result<GrammarRef, Error> {
                                     if let Some(t) = terminals.iter().find(|&t| *s == t.id) {
                                         rule.symbols.push(Symbol::Terminal(t.index));
                                     } else {
-                                        println!("{}", s);
                                         return Err(Error::Unspecified(line!())); //undefined terminal literal, this cannot happen
                                     }
                                 }
@@ -653,7 +647,6 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
             Ok(ParseToken::new(ParseTerminal::Int, p1, p2))
         }
         Some(c) => {
-            println!("{} at {}", c, r.position());
             Err(Error::Unspecified(line!()))
         }
         None => {
@@ -1038,7 +1031,6 @@ impl Parser {
                     // continue
                 },
                 _ => {
-                    println!("{:?}", t);
                     return Err(Error::Unspecified(line!()))
                 },
             }
@@ -1109,15 +1101,10 @@ impl Parser {
                         }
                     },
                     _ => {
-                        //println!("{:?}", pg.modes[mode_index].rules[rule_index]);
-                        //println!("{:?}", t);
                         return Err(Error::Unspecified(line!()))
                     },
                 }
             }
-            //println!("{:?}", pg.modes[mode_index].rules[rule_index]);
-            //println!("\"{}\"", s);
-            //debug!("parsing regex: {}", s);
             pg.modes[mode_index].rules[rule_index].expr.regex = Some(Regex::parse(&s)?);
         }
         Ok(())

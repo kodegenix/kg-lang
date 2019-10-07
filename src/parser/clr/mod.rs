@@ -128,7 +128,6 @@ impl Parser for ClrParser {
                 }
             }
         } else {
-            println!("{:?}", token);
             unreachable!();
         }
     }
