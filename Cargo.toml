@@ -15,7 +15,7 @@ edition = "2018"
 [dependencies]
 kg-diag = "0.4.0"
 kg-js = "0.1.1"
-kg-tree = "0.2.0"
+kg-tree = "0.2.1"
 kg-utils = "0.4.0"
 log = "0.4.11"
 libc = "0.2.74"
