@@ -418,26 +418,12 @@ impl Regex {
                 Repeat { e, min, max, greedy } => {
                     if min == 1 && max == 1 {
                         simplify(*e)?
-                    } else if min + max <= 1 {
+                    } else {
                         Repeat {
                             e: Box::new(simplify(*e)?),
-                            min: min,
-                            max: max,
-                            greedy: greedy,
-                        }
-                    } else {
-                        let e = simplify(*e)?;
-                        let mut es = vec![e.clone(); min as usize];
-                        for _ in 0..(max - min) {
-                            es.push(Repeat {
-                                e: Box::new(e.clone()),
-                                min: 0,
-                                max: 1,
-                                greedy: greedy,
-                            });
-                        }
-                        Concat {
-                            es: es,
+                            min,
+                            max,
+                            greedy,
                         }
                     }
                 }

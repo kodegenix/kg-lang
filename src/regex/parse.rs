@@ -181,31 +181,44 @@ impl Parser {
     }
 
     fn repeat(&mut self, r: &mut dyn CharReader) -> Result<ParseExpr, Error> {
-        fn scan_repeat(r: &mut dyn CharReader) -> Result<(u32, u32), Error> {
-            let mut min = 0;
-            let mut max = 0;
+        fn scan_repeat(r: &mut dyn CharReader) -> Result<(u32, Option<u32>), Error> {
+            let mut min = std::u32::MAX;
+            let mut max = std::u32::MAX;
             let mut n = 0;
             while let Some(c) = r.next_char()? {
                 if c >= '0' && c <= '9' {
-                    if n < 2 {
-                        n = 1;
-                        min = min * 10 + (c as u32 - '0' as u32);
-                    } else {
-                        max = max * 10 + (c as u32 - '0' as u32);
+                    let d = c as u32 - '0' as u32;
+                    match n {
+                        0 => {
+                            n = 1;
+                            min = d;
+                        }
+                        1 => {
+                            min *= 10;
+                            min += d;
+                        }
+                        2 => {
+                            n = 3;
+                            max = d;
+                        }
+                        3 => {
+                            max *= 10;
+                            max += d;
+                        }
+                        _ => unreachable!()
                     }
                 } else if c == ',' {
                     if n == 1 {
                         n = 2;
+                        max = 0;
                     } else {
                         return Err(Error::Unspecified(line!()));
                     }
                 } else if c == '}' {
                     if n == 0 {
                         return Err(Error::Unspecified(line!()));
-                    } else if n == 1 {
-                        max = min;
                     }
-                    return Ok((min, max));
+                    return Ok((min, if max < std::u32::MAX { Some(max) } else { None }));
                 }
             }
             Err(Error::Unspecified(line!()))
@@ -234,7 +247,15 @@ impl Parser {
                 _ => {
                     let r = scan_repeat(r)?;
                     min = r.0;
-                    max = r.1;
+                    /// max should not be less then min (if set)
+                    if let Some(m) = r.1 {
+                        if m != 0 && m < min {
+                            return Err(Error::Unspecified(line!()));
+                        }
+                        max = m;
+                    } else {
+                        max = min;
+                    }
                 }
             }
 
@@ -247,9 +268,9 @@ impl Parser {
                 ParseExpr::Regex(r @ _) => {
                     Ok(ParseExpr::Regex(Repeat {
                         e: Box::new(r),
-                        min: min,
-                        max: max,
-                        greedy: greedy,
+                        min,
+                        max,
+                        greedy,
                     }))
                 }
                 _ => {
