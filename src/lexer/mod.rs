@@ -1,8 +1,18 @@
 use super::*;
 
+use self::commons::*;
+use self::prog::{Program, Opcode};
+use self::nfa::Nfa;
+use self::dfa::Dfa;
+
+mod commons;
+
 pub mod prog;
+pub mod nfa;
+pub mod dfa;
 
 
+//FIXME (jc)
 #[derive(Debug)]
 pub enum LexerError {
     UnexpectedEof(Position),
@@ -37,13 +47,13 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new<'a>(lexeme: usize, value: Cow<'a, str>,
+    pub fn new(lexeme: usize, value: Cow<str>,
                start: Position, end: Position) -> Token {
         Token {
-            lexeme: lexeme,
+            lexeme,
             value: value.into_owned(),
-            start: start,
-            end: end,
+            start,
+            end,
             ..Default::default()
         }
     }
@@ -51,11 +61,11 @@ impl Token {
     pub fn with_id<'a>(lexeme: usize, id: Cow<'a, str>, value: Cow<'a, str>,
                    start: Position, end: Position) -> Token {
         Token {
-            lexeme: lexeme,
+            lexeme,
             id: id.into_owned(),
             value: value.into_owned(),
-            start: start,
-            end: end,
+            start,
+            end,
             ..Default::default()
         }
     }

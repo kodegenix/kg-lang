@@ -1,43 +1,14 @@
 use super::*;
 
-use kg_utils::collections::SparseSet;
 use std::collections::VecDeque;
 
-
-const EMPTY_GOTO: u32 = ::std::u32::MAX;
-
-#[derive(Debug, Clone, Copy)]
-enum Opcode {
-    Match(usize),
-    Byte(u32, u8),
-    Range(u32, u8, u8),
-    Mask(u32, u32),
-    Split(u32, u32),
-}
-
-impl Opcode {
-    fn shift(&mut self, goto_offset: u32, mask_offset: u32) {
-        match *self {
-            Opcode::Match(..) => { },
-            Opcode::Byte(ref mut g, ..) => *g += goto_offset,
-            Opcode::Range(ref mut g, ..) => *g += goto_offset,
-            Opcode::Mask(ref mut g, ref mut m) => {
-                *g += goto_offset;
-                *m += mask_offset;
-            }
-            Opcode::Split(ref mut g1, ref mut g2) => {
-                *g1 += goto_offset;
-                *g2 += goto_offset;
-            }
-        }
-    }
-}
-
-
+/// Regex engine implementation in form of virtual machine. This is essentially equivalent to
+/// epsilon-NFA (NFA with null moves), but it is convenient to implement as executable machine
+/// with small memory footprint
 #[derive(Debug, Clone)]
 pub struct Program {
     code: Vec<Opcode>,
-    masks: Vec<Mask>,
+    masks: Vec<ByteMask>,
 }
 
 impl Program {
@@ -81,7 +52,7 @@ impl Program {
             mask_offset += p.masks.len();
         }
 
-        // remapping masks, since we removed duplicated in merged program
+        // remapping masks, since we removed duplicated masks in merged program
         for p in prog.code.iter_mut() {
             if let &mut Opcode::Mask(_, ref mut m) = p {
                 *m = *mask_map.get(m).unwrap();
@@ -98,7 +69,17 @@ impl Program {
         }
     }
 
-    fn opcode(&self, pc: u32) -> &Opcode {
+    #[inline]
+    pub fn code(&self) -> &[Opcode] {
+        &self.code
+    }
+
+    #[inline]
+    fn opcode_count(&self) -> u32 {
+        self.code.len() as u32
+    }
+
+    pub fn opcode(&self, pc: u32) -> &Opcode {
         &self.code[pc as usize]
     }
 
@@ -106,16 +87,24 @@ impl Program {
         &mut self.code[pc as usize]
     }
 
-    fn mask(&self, mask: u32) -> &Mask {
-        &self.masks[mask as usize]
+    #[inline]
+    fn add_opcode(&mut self, op: Opcode) -> u32 {
+        let n = self.code.len() as u32;
+        self.code.push(op);
+        n
     }
 
     #[inline]
-    fn count(&self) -> u32 {
-        self.code.len() as u32
+    pub fn masks(&self) -> &[ByteMask] {
+        &self.masks
     }
 
-    fn add_mask(&mut self, mask: Mask) -> u32 {
+    #[inline]
+    pub fn mask(&self, mask: u32) -> &ByteMask {
+        &self.masks[mask as usize]
+    }
+
+    fn add_mask(&mut self, mask: ByteMask) -> u32 {
         for (i, m) in self.masks.iter().enumerate() {
             if *m == mask {
                 return i as u32;
@@ -125,13 +114,6 @@ impl Program {
         self.masks.push(mask);
         idx
     }
-
-    #[inline]
-    fn add_opcode(&mut self, op: Opcode) -> u32 {
-        let n = self.code.len() as u32;
-        self.code.push(op);
-        n
-    }
 }
 
 impl std::fmt::Display for Program {
@@ -140,13 +122,13 @@ impl std::fmt::Display for Program {
 
         for (i, op) in self.code.iter().enumerate() {
             let i = i as u32;
-            write!(f, "{:04} ", i)?;
+            write!(f, "({:4}): ", i)?;
             match *op {
-                Byte(goto, b) => write!(f, "byte  ({})    {:?}", goto, b as char)?,
-                Range(goto, b1, b2) => write!(f, "range ({})    {:?}-{:?}", goto, b1 as char, b2 as char)?,
-                Mask(goto, m) => write!(f, "mask  ({})    {}:{}", goto, m, self.mask(m))?,
-                Split(goto1, goto2) => write!(f, "split ({}, {})", goto1, goto2)?,
-                Match(m) => write!(f, "match        {}", m)?,
+                Byte(goto, b) => write!(f, "byte  ({:4})  {:?}", goto, b as char)?,
+                Range(goto, b1, b2) => write!(f, "range ({:4})  {:?}-{:?}", goto, b1 as char, b2 as char)?,
+                Mask(goto, m) => write!(f, "mask  ({:4})  {}:{}", goto, m, self.mask(m))?,
+                Split(goto1, goto2) => write!(f, "split ({:4}, {:4})", goto1, goto2)?,
+                Match(m) => write!(f, "match [{}]", m)?,
             }
             write!(f, "\n")?;
         }
@@ -154,66 +136,30 @@ impl std::fmt::Display for Program {
     }
 }
 
-#[derive(Clone)]
-struct Mask([bool; 256]);
-
-#[allow(unused)]
-impl Mask {
-    fn empty() -> Mask {
-        Mask([false; 256])
-    }
-
-    fn full() -> Mask {
-        Mask([true; 256])
-    }
-
-    fn matches(&self, input: u8) -> bool {
-        self.0[input as usize]
-    }
-
-    fn include(&mut self, input: u8) {
-        self.0[input as usize] = true;
-    }
-
-    fn exclude(&mut self, input: u8) {
-        self.0[input as usize] = false;
-    }
-
-    fn negate(&mut self) {
-        for i in 0..256 {
-            self.0[i] = !self.0[i];
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub enum Opcode {
+    Match(u32),
+    Byte(u32, u8),
+    Range(u32, u8, u8),
+    Mask(u32, u32),
+    Split(u32, u32),
 }
 
-impl PartialEq for Mask {
-    fn eq(&self, other: &Self) -> bool {
-        use libc::{c_void, memcmp};
-        use std::mem::size_of;
-
-        unsafe { memcmp(self.0.as_ptr() as *const c_void, other.0.as_ptr() as *const c_void, size_of::<Mask>()) == 0 }
-    }
-}
-
-impl Eq for Mask { }
-
-impl std::fmt::Debug for Mask {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_list().entries(self.0.iter()).finish()
-    }
-}
-
-impl std::fmt::Display for Mask {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use std::fmt::Write;
-
-        let mut s = String::with_capacity(256);
-        for i in 0u8 ..= 255u8 {
-            if self.matches(i) {
-                write!(s, "{}", i as char)?;
+impl Opcode {
+    fn shift(&mut self, goto_offset: u32, mask_offset: u32) {
+        match *self {
+            Opcode::Match(..) => { },
+            Opcode::Byte(ref mut g, ..) => *g += goto_offset,
+            Opcode::Range(ref mut g, ..) => *g += goto_offset,
+            Opcode::Mask(ref mut g, ref mut m) => {
+                *g += goto_offset;
+                *m += mask_offset;
+            }
+            Opcode::Split(ref mut g1, ref mut g2) => {
+                *g1 += goto_offset;
+                *g2 += goto_offset;
             }
         }
-        write!(f, "{:?}", s)
     }
 }
 
@@ -232,31 +178,21 @@ impl Compiler {
         }
     }
 
-    fn set_goto(&mut self, pc: u32, goto: u32) {
-        match self.prog.code[pc as usize] {
-            Opcode::Match(..) => unreachable!(),
-            Opcode::Mask(ref mut g, ..) => *g = goto,
-            Opcode::Byte(ref mut g, ..) => *g = goto,
-            Opcode::Range(ref mut g, ..) => *g = goto,
-            Opcode::Split(ref mut g, ..) => *g = goto,
-        }
-    }
-
     fn byte(&mut self, b: u8) -> Proc {
-        let n = self.prog.count();
+        let n = self.prog.opcode_count();
         self.prog.add_opcode(Opcode::Byte(n + 1, b));
         Proc(n, n + 1)
     }
 
     fn range(&mut self, a: u8, b: u8) -> Proc {
-        let n = self.prog.count();
+        let n = self.prog.opcode_count();
         self.prog.add_opcode(Opcode::Range(n + 1, a, b));
         Proc(n, n + 1)
     }
 
-    fn mask(&mut self, m: Mask) -> Proc {
+    fn mask(&mut self, m: ByteMask) -> Proc {
         let m = self.prog.add_mask(m);
-        let n = self.prog.count();
+        let n = self.prog.opcode_count();
         self.prog.add_opcode(Opcode::Mask(n + 1, m));
         Proc(n, n + 1)
     }
@@ -322,7 +258,7 @@ impl Compiler {
                                     p.merge(self.byte(b1));
                                 }
                                 (Some(b1), Some(b2)) => {
-                                    let mut m = Mask::empty();
+                                    let mut m = ByteMask::empty();
                                     m.include(b1);
                                     m.include(b2);
                                     p.merge(self.mask(m));
@@ -353,7 +289,7 @@ impl Compiler {
                         let range = set.iter().next().unwrap();
                         self.range(range.from() as u8, range.to() as u8)
                     } else {
-                        let mut m = Mask::empty();
+                        let mut m = ByteMask::empty();
                         for r in set.iter() {
                             for c in r.chars() {
                                 m.include(c as u8);
@@ -363,7 +299,7 @@ impl Compiler {
                     }
                 } else {
                     //FIXME (jc) handle Unicode UTF8
-                    let mut m = Mask::empty();
+                    let mut m = ByteMask::empty();
                     for r in set.iter() {
                         for c in r.chars() {
                             if c <= '\x7F' {
@@ -415,7 +351,7 @@ impl Compiler {
             }
             Regex::Alternate { ref es } => {
                 debug_assert!(es.len() > 1);
-                let s = self.prog.count();
+                let s = self.prog.opcode_count();
                 for _ in 0..es.len() - 1 {
                     self.prog.add_opcode(Opcode::Split(0, 0));
                 }
@@ -430,8 +366,31 @@ impl Compiler {
                     *self.prog.opcode_mut(s + i) = Opcode::Split(s + i + 1, p.0);
                     n.merge(p);
                 }
+                // the last arm will have correct goto(s), so we remove it from `procs`
+                procs.pop_back();
+                // in other arms the goto(s) must be corrected to jump after the alternative
                 for p in procs {
-                    self.set_goto(p.1 - 1, n.1);
+                    let pc = p.1 - 1;
+                    let old_goto = pc + 1;
+                    let new_goto = n.1;
+                    debug_assert_ne!(old_goto, new_goto);
+                    match self.prog.opcode_mut(pc) {
+                        Opcode::Match(..) => unreachable!(),
+                        Opcode::Mask(ref mut g, ..) |
+                        Opcode::Byte(ref mut g, ..) |
+                        Opcode::Range(ref mut g, ..) => {
+                            debug_assert_eq!(*g, old_goto);
+                            *g = new_goto;
+                        },
+                        Opcode::Split(ref mut g1, ref mut g2) => {
+                            debug_assert!(*g1 == old_goto || *g2 == old_goto);
+                            if *g1 == old_goto {
+                                *g1 = new_goto;
+                            } else {
+                                *g2 = new_goto;
+                            }
+                        },
+                    }
                 }
                 Proc(s, n.1)
             }
@@ -447,7 +406,7 @@ impl Compiler {
 
     pub fn compile(mut self, regex: &Regex) -> Program {
         self.regex(regex);
-        self.prog.add_opcode(Opcode::Match(self.matching));
+        self.prog.add_opcode(Opcode::Match(self.matching as u32));
         self.prog
     }
 }
@@ -479,7 +438,6 @@ impl Default for Proc {
 }
 
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Status {
     Processing,
@@ -499,8 +457,8 @@ impl Machine {
         let len = program.code.len();
         Machine {
             program,
-            pc1: SparseSet::new(len),
-            pc2: SparseSet::new(len),
+            pc1: SparseSet::with_capacity(len),
+            pc2: SparseSet::with_capacity(len),
         }
     }
 
@@ -530,7 +488,7 @@ impl Machine {
 
     fn step(&mut self, input: u8) -> Status {
         let mut matched = 0;
-        let mut matched_pc = std::u32::MAX;
+        let mut matched_pc = EMPTY_GOTO;
 
         self.pc2.clear();
 
@@ -571,7 +529,7 @@ impl Machine {
 
         if self.pc1.is_empty() {
             if matched > 0 {
-                Status::Matched(matched)
+                Status::Matched(matched as usize)
             } else {
                 Status::Failed
             }
@@ -702,6 +660,7 @@ impl Lexer for Matcher {
     }
 }
 
+//FIXME (jc)
 #[cfg(test)]
 mod tests {
     use super::*;
