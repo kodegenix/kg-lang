@@ -765,6 +765,7 @@ mod tests {
                     eprintln!("match {}: {:?}", m.matching(), s);
                 },
                 None => {
+                    r.seek(p1).unwrap();
                     r.next_byte().unwrap();
                     eprintln!("?");
                 }
