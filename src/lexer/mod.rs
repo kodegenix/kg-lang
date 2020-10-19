@@ -1,7 +1,7 @@
 use super::*;
 
 use self::commons::*;
-use self::prog::{Program, Opcode};
+use self::prog::{Program, Opcode, ProgMatcher, ProgLexer};
 use self::nfa::Nfa;
 use self::dfa::Dfa;
 

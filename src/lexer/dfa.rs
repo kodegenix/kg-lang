@@ -12,7 +12,7 @@ impl Dfa {
         Builder::new().build(nfa)
     }
 
-    pub fn exec(&self, reader: &mut dyn ByteReader) -> IoResult<Option<usize>> {
+    pub fn exec(&self, reader: &mut dyn ByteReader) -> IoResult<Option<u32>> {
         let pos = reader.position();
 
         let mut s = 0u32;
@@ -30,7 +30,7 @@ impl Dfa {
 
         if let Some(a) = self.states[s as usize].accept {
             m = a.matching();
-            Ok(Some(m as usize))
+            Ok(Some(m))
         } else {
             reader.seek(pos)?;
             Ok(None)
@@ -227,7 +227,7 @@ mod tests {
         let dfa = Dfa::from_nfa(&nfa);
         println!("--- dfa\n{}", dfa);
 
-        let mut mach = Machine::new(p);
+        let mut mach = ProgMatcher::from_progs(std::iter::once(p));
         let mut r = MemByteReader::new(s.as_bytes());
         println!("\nprog matching:");
         while !r.eof() {

@@ -1,6 +1,31 @@
+use std::num::NonZeroU32;
+use std::ops::{Deref, DerefMut};
+
 use kg_utils::collections::SparseSet;
 
 pub const EMPTY_GOTO: u32 = ::std::u32::MAX;
+pub const EMPTY_MATCH: u32 = ::std::u32::MAX;
+
+
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct Match(NonZeroU32);
+
+impl Match {
+    pub fn new(m: u32) -> Match {
+        Match(NonZeroU32::new(m).unwrap())
+    }
+
+    pub fn matching(&self) -> u32 {
+        self.0.get()
+    }
+}
+
+impl std::fmt::Display for Match {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "[{}]", self.0.get())
+    }
+}
+
 
 #[derive(Clone)]
 pub struct ByteMask([bool; 256]);
@@ -125,11 +150,19 @@ impl std::fmt::Display for Edge {
 pub struct Accept(u32, u32);
 
 impl Accept {
-    pub fn new(pc: u32, matched: u32) -> Accept {
-        Accept(pc, matched)
+    pub fn new(state: u32, matched: u32) -> Accept {
+        Accept(state, matched)
     }
 
-    pub fn pc(&self) -> u32 {
+    pub fn empty() -> Accept {
+        Accept(EMPTY_GOTO, EMPTY_MATCH)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == EMPTY_GOTO
+    }
+
+    pub fn state(&self) -> u32 {
         self.0
     }
 
@@ -140,7 +173,11 @@ impl Accept {
 
 impl std::fmt::Display for Accept {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "accept [{}]({})", self.matching(), self.pc())
+        if self.is_empty() {
+            write!(f, "accept [-]")
+        } else {
+            write!(f, "accept [{}]({})", self.matching(), self.state())
+        }
     }
 }
 

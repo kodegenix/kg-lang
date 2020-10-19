@@ -173,11 +173,11 @@ impl JsRuntime {
     }
 
     fn build_lexers(&mut self) -> Result<(), Error> {
-        use lexer::prog::Matcher;
+        use lexer::prog::ProgLexer;
 
         let g = self.grammar.borrow();
         for mode in g.modes().iter() {
-            self.lexers.push(Box::new(Matcher::new(&self.grammar, mode.unmatched(), mode.index())));
+            self.lexers.push(Box::new(ProgLexer::new(&self.grammar, mode.unmatched(), mode.index())));
         }
         Ok(())
     }
