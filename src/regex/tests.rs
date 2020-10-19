@@ -88,9 +88,3 @@ fn literal_display_quoted() {
     assert_eq!(format!("{}", r), r"\\\.\+\*\?\|\[\]\(\)\{\}-^");
 }
 
-
-#[test]
-fn simplify_to_canonical_repeats() {
-    let r = Regex::parse("abc{3,5}").unwrap();
-    assert_eq!(format!("{}", r), "abcccc?c?");
-}

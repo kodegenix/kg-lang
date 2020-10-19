@@ -478,11 +478,12 @@ impl Runtime for JsRuntime {
 
         loop {
             let t = self.lex_token(reader)?;
+            println!("token: {}", t);
             if t.lexeme() != 0 {
-                self.parse_token(&t)?;
+                //self.parse_token(&t)?;
             } else {
-                self.parse_token(&t)?;
-                self.parse_token(&t)?;
+                //self.parse_token(&t)?;
+                //self.parse_token(&t)?;
                 break;
             }
         }

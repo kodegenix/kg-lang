@@ -501,10 +501,11 @@ impl Machine {
                 Opcode::Match(m) => {
                     // Match value might not correspond with proper matching priorities,
                     // but patterns with higher priority are always first in the machine code.
-                    if matched_pc > pc {
-                        matched_pc = pc;
+                    //if matched_pc > pc {
+                    //    matched_pc = pc;
                         matched = m;
-                    }
+                    break;
+                    //}
                 }
                 Opcode::Byte(goto, b) => {
                     if input == b {
@@ -538,7 +539,7 @@ impl Machine {
         }
     }
 
-    fn exec(&mut self, reader: &mut dyn ByteReader) -> IoResult<Option<usize>> {
+    pub fn exec(&mut self, reader: &mut dyn ByteReader) -> IoResult<Option<usize>> {
         self.restart();
 
         let pos = reader.position();
@@ -569,15 +570,15 @@ impl Machine {
 
 
 #[derive(Debug)]
-pub struct Matcher {
+pub struct Matcher2 {
     grammar: GrammarRef,
     machine: Machine,
     unmatched: usize,
     mode: usize,
 }
 
-impl Matcher {
-    pub fn new(grammar: &GrammarRef, unmatched: usize, mode: usize) -> Matcher {
+impl Matcher2 {
+    pub fn new(grammar: &GrammarRef, unmatched: usize, mode: usize) -> Matcher2 {
         let g = grammar.borrow();
 
         let mut lexemes: Vec<&Lexeme> = g.terminals().iter()
@@ -603,7 +604,7 @@ impl Matcher {
             progs.push(p);
         }
 
-        Matcher {
+        Matcher2 {
             grammar: grammar.clone(),
             machine: Machine::new(Program::merge(progs.iter())),
             unmatched,
@@ -612,7 +613,7 @@ impl Matcher {
     }
 }
 
-impl Lexer for Matcher {
+impl Lexer for Matcher2 {
     fn reset(&mut self) {
         self.machine.restart();
     }
@@ -659,6 +660,140 @@ impl Lexer for Matcher {
         self.mode
     }
 }
+
+
+#[derive(Debug)]
+pub struct Matcher {
+    grammar: GrammarRef,
+    machines: Vec<Machine>,
+    unmatched: usize,
+    mode: usize,
+    stack1: Vec<usize>,
+    stack2: Vec<usize>,
+}
+
+impl Matcher {
+    pub fn new(grammar: &GrammarRef, unmatched: usize, mode: usize) -> Matcher {
+        let g = grammar.borrow();
+
+        let mut lexemes: Vec<&Lexeme> = g.terminals().iter()
+            .filter(|lexeme| lexeme.has_mode(mode) && match *lexeme.regex() {
+                Regex::Empty | Regex::Any => false,
+                _ => true,
+            })
+            .collect();
+
+        lexemes.sort_by(|a, b| {
+            let pa = a.precedence(mode);
+            let pb = b.precedence(mode);
+            match pa.cmp(&pb) {
+                Ordering::Equal => a.index().cmp(&b.index()),
+                o => o
+            }
+        });
+
+        let mut machines = Vec::with_capacity(lexemes.len());
+
+        for &lexeme in lexemes.iter() {
+            let p = Program::from_regex(lexeme.regex(), lexeme.index());
+            machines.push(Machine::new(p));
+        }
+
+        Matcher {
+            grammar: grammar.clone(),
+            machines: machines,
+            unmatched: unmatched,
+            mode: mode,
+            stack1: Vec::with_capacity(lexemes.len()),
+            stack2: Vec::with_capacity(lexemes.len()),
+        }
+    }
+
+    fn swap(&mut self) {
+        std::mem::swap(&mut self.stack1, &mut self.stack2);
+    }
+}
+
+impl Lexer for Matcher {
+    fn unmatched(&self) -> usize {
+        self.unmatched
+    }
+
+    fn mode(&self) -> usize {
+        self.mode
+    }
+
+    fn reset(&mut self) {
+        for m in self.machines.iter_mut() {
+            m.restart();
+        }
+        self.stack1.clear();
+        self.stack1.extend(0..self.machines.len());
+    }
+
+    fn lex(&mut self, reader: &mut ByteReader) -> Result<Token, LexerError> {
+        let s = reader.position();
+
+        if reader.eof() {
+            Ok(Token::with_id(0, "$".into(), "".into(), s, s))
+        } else {
+            self.reset();
+
+            let mut matched = 0;
+
+            while let Some(c) = reader.peek_byte(0)? {
+                self.stack2.clear();
+
+                for &m in self.stack1.iter() {
+                    match self.machines[m].step(c) {
+                        Status::Processing => {
+                            self.stack2.push(m)
+                        },
+                        Status::Matched(m) => {
+                            matched = m;
+                        },
+                        Status::Failed => {},
+                    }
+                }
+
+                if self.stack2.is_empty() {
+                    break;
+                }
+
+                self.swap();
+                reader.next_byte()?;
+            }
+
+            if reader.eof() {
+                for &m in self.stack1.iter() {
+                    if let Status::Matched(m) = self.machines[m].step(0xFFu8) {
+                        matched = m;
+                    }
+                }
+            }
+
+            if matched > 0 {
+                let g = self.grammar.borrow();
+                let t = g.terminal(matched);
+                let e = reader.position();
+                let mut token = Token::with_id(t.index(), t.id().into(), reader.slice(s.offset, e.offset)?.into(), s, e);
+                token.set_mode(self.mode);
+                Ok(token)
+            } else if self.unmatched > 0 {
+                reader.next_byte()?;
+                let g = self.grammar.borrow();
+                let t = g.terminal(self.unmatched);
+                let e = reader.position();
+                let mut token = Token::with_id(t.index(), t.id().into(), reader.slice(s.offset, e.offset)?.into(), s, e);
+                token.set_mode(self.mode);
+                Ok(token)
+            } else {
+                Err(LexerError::UnexpectedInput(s))
+            }
+        }
+    }
+}
+
 
 //FIXME (jc)
 #[cfg(test)]

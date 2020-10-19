@@ -169,6 +169,7 @@ impl Builder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::prog::Machine;
 
     //FIXME (jc)
     #[test]
@@ -194,6 +195,55 @@ mod tests {
         println!("--- dfa\n{}", dfa);
 
         let s = "abaaaaab abc abb amma aaaddddmm";
+        let mut r = MemByteReader::new(s.as_bytes());
+        while !r.eof() {
+            let p1 = r.position();
+            match dfa.exec(&mut r).unwrap() {
+                Some(m) => {
+                    let p2 = r.position();
+                    println!("match: {} {:?}", m, r.slice_pos(p1, p2).unwrap());
+                }
+                None => {
+                    println!("err: {:?}", r.next_byte().unwrap().unwrap() as char);
+                }
+            }
+        }
+    }
+
+    //FIXME (jc)
+    #[test]
+    fn test2() {
+        let s = "/*aaa*/aaaabbbb/*bbb*/zz";
+        let re1 = Regex::parse("/\\*[/*ab]*\\*/").unwrap();
+
+        println!("{:?}", re1);
+
+        let p1 = Program::from_regex(&re1, 1);
+
+        let mut p = Program::merge(&[p1]);
+        println!("--- prog\n{}", p);
+        let nfa = Nfa::from_program(&p);
+        println!("--- nfa\n{}", nfa);
+        let dfa = Dfa::from_nfa(&nfa);
+        println!("--- dfa\n{}", dfa);
+
+        let mut mach = Machine::new(p);
+        let mut r = MemByteReader::new(s.as_bytes());
+        println!("\nprog matching:");
+        while !r.eof() {
+            let p1 = r.position();
+            match mach.exec(&mut r).unwrap() {
+                Some(m) => {
+                    let p2 = r.position();
+                    println!("match: {} {:?}", m, r.slice_pos(p1, p2).unwrap());
+                }
+                None => {
+                    println!("err: {:?}", r.next_byte().unwrap().unwrap() as char);
+                }
+            }
+        }
+
+        println!("\ndfa matching:");
         let mut r = MemByteReader::new(s.as_bytes());
         while !r.eof() {
             let p1 = r.position();
