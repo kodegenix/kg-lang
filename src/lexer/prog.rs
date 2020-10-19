@@ -592,18 +592,20 @@ impl ProgMatcher {
         } else {
             self.reset();
 
-            let mut matched = 0;
-
+            let mut matching = EMPTY_MATCH;
             while let Some(c) = reader.peek_byte(0)? {
                 self.stack2.clear();
 
-                for &m in self.stack1.iter() {
-                    match self.machines[m].step(c) {
+                matching = EMPTY_MATCH;
+                for i in self.stack1.iter().cloned() {
+                    match self.machines[i].step(c) {
                         Status::Processing => {
-                            self.stack2.push(m)
+                            self.stack2.push(i)
                         },
                         Status::Matched(m) => {
-                            matched = m;
+                            if matching > m {
+                                matching = m;
+                            }
                         },
                         Status::Failed => {},
                     }
@@ -618,15 +620,17 @@ impl ProgMatcher {
             }
 
             if reader.eof() {
-                for m in self.stack1.iter().cloned() {
-                    if let Status::Matched(m) = self.machines[m].step(0xFFu8) {
-                        matched = m;
+                for i in self.stack1.iter().cloned() {
+                    if let Status::Matched(m) = self.machines[i].step(0xFFu8) {
+                        if matching > m {
+                            matching = m;
+                        }
                     }
                 }
             }
 
-            if matched > 0 {
-                Ok(Some(Match::new(matched)))
+            if matching != EMPTY_MATCH {
+                Ok(Some(Match::new(matching)))
             } else {
                 Ok(None)
             }

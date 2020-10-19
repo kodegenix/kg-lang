@@ -12,7 +12,8 @@ pub struct Match(NonZeroU32);
 
 impl Match {
     pub fn new(m: u32) -> Match {
-        Match(NonZeroU32::new(m).unwrap())
+        debug_assert_ne!(m, 0);
+        Match(unsafe { NonZeroU32::new_unchecked(m) })
     }
 
     pub fn matching(&self) -> u32 {
