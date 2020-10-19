@@ -701,9 +701,9 @@ impl Matcher {
 
         Matcher {
             grammar: grammar.clone(),
-            machines: machines,
-            unmatched: unmatched,
-            mode: mode,
+            machines,
+            unmatched,
+            mode,
             stack1: Vec::with_capacity(lexemes.len()),
             stack2: Vec::with_capacity(lexemes.len()),
         }
@@ -715,14 +715,6 @@ impl Matcher {
 }
 
 impl Lexer for Matcher {
-    fn unmatched(&self) -> usize {
-        self.unmatched
-    }
-
-    fn mode(&self) -> usize {
-        self.mode
-    }
-
     fn reset(&mut self) {
         for m in self.machines.iter_mut() {
             m.restart();
@@ -791,6 +783,14 @@ impl Lexer for Matcher {
                 Err(LexerError::UnexpectedInput(s))
             }
         }
+    }
+
+    fn unmatched(&self) -> usize {
+        self.unmatched
+    }
+
+    fn mode(&self) -> usize {
+        self.mode
     }
 }
 

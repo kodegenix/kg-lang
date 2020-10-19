@@ -343,6 +343,7 @@ impl JsRuntime {
 
 
     fn process_token(&mut self, token: &mut Token) -> Result<TokenProcessResult, Error> {
+        println!("token: {}", token);
         let g = self.grammar.borrow();
         let lexeme = g.terminal(token.lexeme());
         let mut result = TokenProcessResult::Done;
@@ -478,7 +479,6 @@ impl Runtime for JsRuntime {
 
         loop {
             let t = self.lex_token(reader)?;
-            println!("token: {}", t);
             if t.lexeme() != 0 {
                 //self.parse_token(&t)?;
             } else {

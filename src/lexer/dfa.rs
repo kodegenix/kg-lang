@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn test2() {
         let s = "/*aaa*/aaaabbbb/*bbb*/zz";
-        let re1 = Regex::parse("/\\*[/*ab]*\\*/").unwrap();
+        let re1 = Regex::parse("/\\*[/*ab]*?\\*/").unwrap();
 
         println!("{:?}", re1);
 
