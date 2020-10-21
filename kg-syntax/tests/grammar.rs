@@ -1,11 +1,11 @@
 #![feature(min_specialization)]
 
 use kg_diag::*;
-use kg_lang::*;
+use kg_syntax::*;
 
 #[test]
 fn parse_grammar() {
-    let f = FileBuffer::open("resources/java/grammar/java.grammar").unwrap();
+    let f = FileBuffer::open("../resources/java/grammar/java.grammar").unwrap();
     let mut r = f.char_reader();
 
     let grammar = GrammarRef::parse(&mut r).unwrap();
@@ -16,7 +16,7 @@ fn parse_grammar() {
         println!("{:?}", lexeme);
     }
 
-    let inp = FileBuffer::open("resources/java/src/main/java/org/example/geom/Point3.java").unwrap();
+    let inp = FileBuffer::open("../resources/java/src/main/java/org/example/geom/Point3.java").unwrap();
     let mut ir = inp.byte_reader();
 
     let n = runtime.process(&mut ir).unwrap();
