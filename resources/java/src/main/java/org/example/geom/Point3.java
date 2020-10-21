@@ -1,7 +1,6 @@
 //%%{ mode = "replace" }%%
 package org.example.geom;
 
-/* */ /*aaaa*/
 public class Point3 {
 
     private double x;
@@ -27,7 +26,7 @@ public class Point3 {
         return super.toString();
             #end
         #end
-        @>*/ /*aaaa*/
+        @>*/
         //@@ #print to_string($class, 1, 'ddd')
         return super.toString() + "["
             + "x=" + this.x

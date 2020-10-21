@@ -603,7 +603,7 @@ impl ProgMatcher {
                             self.stack2.push(i)
                         },
                         Status::Matched(m) => {
-                            if matching > m {
+                            if matching < m {
                                 matching = m;
                             }
                         },
@@ -622,7 +622,7 @@ impl ProgMatcher {
             if reader.eof() {
                 for i in self.stack1.iter().cloned() {
                     if let Status::Matched(m) = self.machines[i].step(0xFFu8) {
-                        if matching > m {
+                        if matching < m {
                             matching = m;
                         }
                     }

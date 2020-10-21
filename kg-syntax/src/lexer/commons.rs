@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use kg_utils::collections::SparseSet;
 
 pub const EMPTY_GOTO: u32 = ::std::u32::MAX;
-pub const EMPTY_MATCH: u32 = ::std::u32::MAX;
+pub const EMPTY_MATCH: u32 = 0;
 
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]

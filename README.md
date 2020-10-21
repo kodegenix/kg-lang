@@ -1,9 +1,9 @@
-# kg-lang
+# kg-syntax
 
-[![Latest Version](https://img.shields.io/crates/v/kg-lang.svg)](https://crates.io/crates/kg-lang)
-[![Documentation](https://docs.rs/kg-lang/badge.svg)](https://docs.rs/kg-lang)
-[![Build Status](https://travis-ci.org/kodegenix/kg-lang.svg?branch=master)](https://travis-ci.org/kodegenix/kg-lang)
-[![codecov](https://codecov.io/gh/kodegenix/kg-lang/branch/master/graph/badge.svg)](https://codecov.io/gh/kodegenix/kg-lang)
+[![Latest Version](https://img.shields.io/crates/v/kg-syntax.svg)](https://crates.io/crates/kg-syntax)
+[![Documentation](https://docs.rs/kg-syntax/badge.svg)](https://docs.rs/kg-syntax)
+[![Build Status](https://travis-ci.org/kodegenix/kg-syntax.svg?branch=master)](https://travis-ci.org/kodegenix/kg-syntax)
+[![codecov](https://codecov.io/gh/kodegenix/kg-syntax/branch/master/graph/badge.svg)](https://codecov.io/gh/kodegenix/kg-syntax)
 
 Runtime LR(1) parser generator library.
 
@@ -13,10 +13,10 @@ Runtime LR(1) parser generator library.
 |-------------------|-------------------|-------------------|
 | [![Build1][3]][4] | [![Build2][2]][4] | [![Build3][1]][4] |
 
-[1]: https://travis-matrix-badges.herokuapp.com/repos/kodegenix/kg-lang/branches/master/1
-[2]: https://travis-matrix-badges.herokuapp.com/repos/kodegenix/kg-lang/branches/master/2
-[3]: https://travis-matrix-badges.herokuapp.com/repos/kodegenix/kg-lang/branches/master/3
-[4]: https://travis-ci.org/kodegenix/kg-lang
+[1]: https://travis-matrix-badges.herokuapp.com/repos/kodegenix/kg-syntax/branches/master/1
+[2]: https://travis-matrix-badges.herokuapp.com/repos/kodegenix/kg-syntax/branches/master/2
+[3]: https://travis-matrix-badges.herokuapp.com/repos/kodegenix/kg-syntax/branches/master/3
+[4]: https://travis-ci.org/kodegenix/kg-syntax
 
 ## License
 

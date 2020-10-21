@@ -12,6 +12,9 @@ fn parse_grammar() {
 
     let mut runtime = JsRuntime::new(&grammar).unwrap();
     println!("\n{}", grammar.borrow());
+    for lexeme in grammar.borrow().terminals().iter() {
+        println!("{:?}", lexeme);
+    }
 
     let inp = FileBuffer::open("resources/java/src/main/java/org/example/geom/Point3.java").unwrap();
     let mut ir = inp.byte_reader();

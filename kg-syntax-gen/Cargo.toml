@@ -1,0 +1,8 @@
+[package]
+name = "kg-syntax-gen"
+version = "0.1.0"
+authors = ["jchlapinski <jakub.chlapinski@kodegenix.pl>"]
+edition = "2018"
+
+[dependencies]
+kg-syntax = { path = "../kg-syntax" }

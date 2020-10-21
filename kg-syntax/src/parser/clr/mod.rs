@@ -101,6 +101,7 @@ impl Parser for ClrParser {
 
     //FIXME (jc) error handling
     fn parse(&mut self, token: &Token) -> Result<Step, ParserError> {
+        println!("parsing: {}", token);
         if let Some(a) = self.find_action_edge(token.lexeme()) {
             match a.action {
                 Action::Shift(s) => {
