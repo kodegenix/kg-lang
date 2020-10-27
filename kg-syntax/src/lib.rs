@@ -1,5 +1,11 @@
+#![feature(min_specialization)]
+
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate kg_diag_derive;
+#[macro_use]
+extern crate kg_display_derive;
 
 use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell, Ref, RefMut};

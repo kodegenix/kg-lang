@@ -5,7 +5,7 @@ mod script;
 
 use std::collections::VecDeque;
 
-
+//FIXME (jc)
 #[derive(Debug)]
 pub enum Error {
     Lexer(LexerError),

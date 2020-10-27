@@ -283,11 +283,11 @@ impl Compiler {
                 }
                 p
             }
-            Regex::Set { ref set } => {
+            Regex::Set(ref set) => {
                 if set.is_ascii_range() {
                     if set.ranges() == 1 {
                         let range = set.iter().next().unwrap();
-                        self.range(range.from() as u8, range.to() as u8)
+                        self.range(range.start() as u8, range.end() as u8)
                     } else {
                         let mut m = ByteMask::empty();
                         for r in set.iter() {
@@ -342,14 +342,14 @@ impl Compiler {
                     }
                 }
             }
-            Regex::Concat { ref es } => {
+            Regex::Concat(ref es) => {
                 let mut n = Proc::default();
                 for e in es {
                     n.merge(self.regex(e));
                 }
                 n
             }
-            Regex::Alternate { ref es } => {
+            Regex::Alternate(ref es) => {
                 debug_assert!(es.len() > 1);
                 let s = self.prog.opcode_count();
                 for _ in 0..es.len() - 1 {

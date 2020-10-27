@@ -1,12 +1,228 @@
-use std::fmt;
-use std::cmp;
+use super::*;
+
 use std::cmp::Ordering;
-use std::option::Option::*;
-use std::char;
 
 mod parse;
 
-pub use self::parse::Error;
+pub use self::parse::Error as ParseError;
+pub use self::parse::ParseErrorDetail;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Regex {
+    Empty,
+    Any,
+    Set(CharSet),
+    //Class(CharClass),
+    Literal {
+        chars: Vec<char>,
+        icase: bool,
+    },
+    Repeat {
+        e: Box<Regex>,
+        min: u32,
+        max: u32,
+        greedy: bool,
+    },
+    Concat(Vec<Regex>),
+    Alternate(Vec<Regex>),
+}
+
+impl Regex {
+    pub fn parse(s: &str) -> Result<Regex, ParseError> {
+        parse::Parser::new().parse_str(s)
+    }
+
+    fn simplify(self, nest_limit: usize) -> Result<Regex, ParseError> {
+        fn simp(expr: Regex, recurse: usize, limit: usize) -> Result<Regex, ParseError> {
+            if recurse > limit {
+                return Err(ParseErrorDetail::Unspecified(line!()).into());
+            }
+            let simplify = |e| simp(e, recurse + 1, limit);
+            Ok(match expr {
+                Regex::Repeat { e, min, max, greedy } => {
+                    if min == 1 && max == 1 {
+                        simplify(*e)?
+                    } else {
+                        Regex::Repeat {
+                            e: Box::new(simplify(*e)?),
+                            min,
+                            max,
+                            greedy,
+                        }
+                    }
+                }
+                Regex::Concat(es) => {
+                    let mut nes = Vec::with_capacity(es.len());
+                    let mut again = false; // Concat containing one or more Concat needs one more recursion
+                    for e in es {
+                        match (nes.pop(), simplify(e)?) {
+                            (None, e) => nes.push(e),
+                            (Some(Regex::Literal { chars: mut chars1, icase: icase1 }),
+                                Regex::Literal { chars: chars2, icase: icase2 }) => {
+                                if icase1 == icase2 {
+                                    chars1.extend(chars2);
+                                    nes.push(Regex::Literal {
+                                        chars: chars1,
+                                        icase: icase1,
+                                    });
+                                } else {
+                                    nes.push(Regex::Literal {
+                                        chars: chars1,
+                                        icase: icase1,
+                                    });
+                                    nes.push(Regex::Literal {
+                                        chars: chars2,
+                                        icase: icase2,
+                                    });
+                                }
+                            }
+                            (Some(Regex::Concat(es1)), Regex::Concat(es2)) => {
+                                nes.extend(es1);
+                                nes.extend(es2);
+                                again = true;
+                            }
+                            (Some(Regex::Concat(es1)), e2) => {
+                                nes.extend(es1);
+                                nes.push(e2);
+                                again = true;
+                            }
+                            (Some(e1), Regex::Concat(es2)) => {
+                                nes.push(e1);
+                                nes.extend(es2);
+                                again = true;
+                            }
+                            (Some(e1), e2) => {
+                                nes.push(e1);
+                                nes.push(e2);
+                            }
+                        }
+                    }
+                    let e: Regex;
+                    if nes.len() == 1 {
+                        e = nes.pop().unwrap()
+                    } else {
+                        nes.shrink_to_fit();
+                        e = Regex::Concat(nes)
+                    }
+                    if again {
+                        simplify(e)?
+                    } else {
+                        e
+                    }
+                }
+                Regex::Alternate(es) => {
+                    let mut nes = Vec::with_capacity(es.len());
+                    for e in es {
+                        let e = simplify(e)?;
+                        if let Regex::Alternate(es2) = e {
+                            for e in es2 {
+                                nes.push(simplify(e)?);
+                            }
+                        } else {
+                            nes.push(e);
+                        }
+                    }
+                    nes.shrink_to_fit();
+                    Regex::Alternate(nes)
+                }
+                Regex::Set(mut set) => {
+                    set.ranges.shrink_to_fit();
+                    Regex::Set(set)
+                }
+                e => e,
+            })
+        }
+        simp(self, 0, nest_limit)
+    }
+
+    #[inline]
+    fn precedence(&self) -> u32 {
+        match *self {
+            Regex::Empty | Regex::Any | Regex::Set(..) => 0,
+            Regex::Literal { ref chars, .. } => {
+                if chars.len() < 2 {
+                    0
+                } else {
+                    1
+                }
+            }
+            Regex::Repeat { .. } => 1,
+            Regex::Concat(..) => 2,
+            Regex::Alternate(..) => 3,
+        }
+    }
+}
+
+impl std::fmt::Display for Regex {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let p = self.precedence();
+
+        match *self {
+            Regex::Empty => Ok(()),
+            Regex::Any => write!(f, "."),
+            Regex::Set(ref set) => write!(f, "{}", set),
+            Regex::Literal { ref chars, icase } => {
+                if icase {
+                    write!(f, "((?i)")?;
+                }
+                for &c in chars {
+                    write!(f, "{:#}", Char::new(c))?;
+                }
+                if icase {
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Regex::Repeat { ref e, min, max, greedy } => {
+                let n = e.precedence();
+                if p > n {
+                    write!(f, "{}", e)?;
+                } else {
+                    write!(f, "({})", e)?;
+                }
+                if min == 0 && max == 1 {
+                    write!(f, "?")?;
+                } else if min == 0 && max == 0 {
+                    write!(f, "*")?;
+                } else if min == 1 && max == 0 {
+                    write!(f, "+")?;
+                } else if min == max {
+                    write!(f, "{{{}}}", min)?;
+                } else {
+                    write!(f, "{{{},{}}}", min, max)?;
+                }
+                if !greedy {
+                    write!(f, "?")?;
+                }
+                Ok(())
+            }
+            Regex::Concat(ref es) => {
+                for expr in es {
+                    if p > expr.precedence() {
+                        write!(f, "{}", expr)?;
+                    } else {
+                        write!(f, "({})", expr)?;
+                    }
+                }
+                Ok(())
+            }
+            Regex::Alternate(ref es) => {
+                for (i, expr) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, "|")?;
+                    }
+                    if p > expr.precedence() {
+                        write!(f, "{}", expr)?;
+                    } else {
+                        write!(f, "({})", expr)?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Copy)]
 struct Char {
@@ -22,19 +238,19 @@ impl Char {
 
     fn prev(c: char) -> char {
         unsafe {
-            char::from_u32_unchecked(c as u32 - 1)
+            std::char::from_u32_unchecked(c as u32 - 1)
         }
     }
 
     fn next(c: char) -> char {
         unsafe {
-            char::from_u32_unchecked(c as u32 + 1)
+            std::char::from_u32_unchecked(c as u32 + 1)
         }
     }
 }
 
-impl fmt::Display for Char {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Char {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.value < ' ' {
             match self.value {
                 '\0' => write!(f, "\\0"),
@@ -68,72 +284,72 @@ impl fmt::Display for Char {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CharRange {
-    from: char,
-    to: char,
+    start: char,
+    end: char,
 }
 
 impl CharRange {
     pub fn from_char(c: char) -> CharRange {
-        CharRange { from: c, to: c }
+        CharRange { start: c, end: c }
     }
 
-    pub fn from_range(from: char, to: char) -> CharRange {
+    pub fn from_range(start: char, end: char) -> CharRange {
         CharRange {
-            from: cmp::min(from, to),
-            to: cmp::max(from, to),
+            start: std::cmp::min(start, end),
+            end: std::cmp::max(start, end),
         }
     }
 
     pub fn contains(&self, r: CharRange) -> bool {
-        self.from <= r.from && self.to >= r.to
+        self.start <= r.start && self.end >= r.end
     }
 
     pub fn overlaps(&self, r: CharRange) -> bool {
-        self.from <= r.to && self.to >= r.from
+        self.start <= r.end && self.end >= r.start
     }
 
     pub fn adjacent(&self, r: CharRange) -> bool {
-        self.from as u32 == r.to as u32 + 1 || self.to as u32 + 1 == r.from as u32
+        self.start as u32 == r.end as u32 + 1 || self.end as u32 + 1 == r.start as u32
     }
 
     pub fn overlaps_or_adjacent(&self, r: CharRange) -> bool {
-        self.from as u32 <= r.to as u32 + 1 && self.to as u32 + 1 >= r.from as u32
+        self.start as u32 <= r.end as u32 + 1 && self.end as u32 + 1 >= r.start as u32
     }
 
     pub fn cardinality(&self) -> u32 {
-        self.to as u32 - self.from as u32 + 1
+        self.end as u32 - self.start as u32 + 1
     }
 
     pub fn chars(&self) -> CharRangeIter {
         CharRangeIter {
             range: self,
-            curr: self.from as u32,
+            curr: self.start as u32,
         }
     }
 
     pub fn is_ascii_range(&self) -> bool {
-        self.to <= '\x7F'
+        self.end <= '\x7F'
     }
 
     pub fn is_byte_range(&self) -> bool {
-        self.to as u32 <= 255
+        self.end as u32 <= 255
     }
 
-    pub fn from(&self) -> char {
-        self.from
+    pub fn start(&self) -> char {
+        self.start
     }
 
-    pub fn to(&self) -> char {
-        self.to
+    pub fn end(&self) -> char {
+        self.end
     }
 }
 
-impl fmt::Display for CharRange {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.to as u32 - self.from as u32 {
-            0 => write!(f, "{}", Char::new(self.from)),
-            1 => write!(f, "{}{}", Char::new(self.from), Char::new(self.to)),
-            _ => write!(f, "{}-{}", Char::new(self.from), Char::new(self.to)),
+impl std::fmt::Display for CharRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.end as u32 - self.start as u32 {
+            0 => write!(f, "{}", Char::new(self.start)),
+            1 => write!(f, "{}{}", Char::new(self.start), Char::new(self.end)),
+            _ => write!(f, "{}-{}", Char::new(self.start), Char::new(self.end)),
         }
     }
 }
@@ -149,9 +365,9 @@ impl<'a> Iterator for CharRangeIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let c: Option<Self::Item>;
-        if self.curr <= self.range.to as u32 {
+        if self.curr <= self.range.end as u32 {
             unsafe {
-                c = Some(char::from_u32_unchecked(self.curr));
+                c = Some(std::char::from_u32_unchecked(self.curr));
             }
             self.curr += 1;
         } else {
@@ -201,28 +417,28 @@ impl CharSet {
                 Ok(index) => {
                     let mut range = self.ranges[index];
                     if range != r {
-                        if r.from < range.from && index > 0 {
+                        if r.start < range.start && index > 0 {
                             let mut r0 = self.ranges[index - 1];
                             if r0.adjacent(r) {
-                                r0.to = cmp::max(range.to, r.to);
+                                r0.end = std::cmp::max(range.end, r.end);
                                 self.ranges[index - 1] = r0;
                                 self.ranges.remove(index);
                                 self.recalc_cardinality();
                                 return;
                             }
                         }
-                        if r.to > range.to && index < self.ranges.len() - 1 {
+                        if r.end > range.end && index < self.ranges.len() - 1 {
                             let mut r1 = self.ranges[index + 1];
                             if r1.adjacent(r) {
-                                r1.from = cmp::min(range.from, r.from);
+                                r1.start = std::cmp::min(range.start, r.start);
                                 self.ranges[index] = r1;
                                 self.ranges.remove(index + 1);
                                 self.recalc_cardinality();
                                 return;
                             }
                         }
-                        range.from = cmp::min(range.from, r.from);
-                        range.to = cmp::max(range.to, r.to);
+                        range.start = std::cmp::min(range.start, r.start);
+                        range.end = std::cmp::max(range.end, r.end);
                         self.ranges[index] = range;
                         self.recalc_cardinality();
                     }
@@ -245,28 +461,28 @@ impl CharSet {
 
     pub fn remove(&mut self, r: CharRange) {
         if self.ranges.is_empty() {
-            if r.from > '\0' {
-                self.ranges.push(CharRange::from_range('\0', Char::prev(r.from)));
+            if r.start > '\0' {
+                self.ranges.push(CharRange::from_range('\0', Char::prev(r.start)));
             }
-            if r.to < '\u{10FFFF}' {
-                self.ranges.push(CharRange::from_range(Char::next(r.to), '\u{10FFFF}'));
+            if r.end < '\u{10FFFF}' {
+                self.ranges.push(CharRange::from_range(Char::next(r.end), '\u{10FFFF}'));
             }
             self.recalc_cardinality();
         } else {
             let mut ranges = Vec::with_capacity(self.ranges.len());
             for range in self.ranges.iter() {
                 if range.contains(r) {
-                    if range.from < r.from {
-                        ranges.push(CharRange::from_range(range.from, Char::prev(r.from)));
+                    if range.start < r.start {
+                        ranges.push(CharRange::from_range(range.start, Char::prev(r.start)));
                     }
-                    if range.to > r.to {
-                        ranges.push(CharRange::from_range(Char::next(r.to), range.to));
+                    if range.end > r.end {
+                        ranges.push(CharRange::from_range(Char::next(r.end), range.end));
                     }
                 } else if range.overlaps(r) {
-                    if range.from < r.from {
-                        ranges.push(CharRange::from_range(range.from, Char::prev(r.from)));
+                    if range.start < r.start {
+                        ranges.push(CharRange::from_range(range.start, Char::prev(r.start)));
                     } else {
-                        ranges.push(CharRange::from_range(Char::next(r.to), range.to));
+                        ranges.push(CharRange::from_range(Char::next(r.end), range.end));
                     }
                 } else {
                     ranges.push(*range);
@@ -307,8 +523,8 @@ impl CharSet {
         self.contains(CharRange::from_char(c))
     }
 
-    pub fn contains_range(&self, from: char, to: char) -> bool {
-        self.contains(CharRange::from_range(from, to))
+    pub fn contains_range(&self, start: char, end: char) -> bool {
+        self.contains(CharRange::from_range(start, end))
     }
 
     pub fn overlaps(&self, r: CharRange) -> bool {
@@ -329,8 +545,8 @@ impl CharSet {
         }
     }
 
-    pub fn overlaps_range(&self, from: char, to: char) -> bool {
-        self.overlaps(CharRange::from_range(from, to))
+    pub fn overlaps_range(&self, start: char, end: char) -> bool {
+        self.overlaps(CharRange::from_range(start, end))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -358,8 +574,8 @@ impl CharSet {
     }
 }
 
-impl fmt::Display for CharSet {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for CharSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "[")?;
         if self.cardinality < 0x10FFFF / 2 {
             for r in self.ranges.iter() {
@@ -368,240 +584,13 @@ impl fmt::Display for CharSet {
         } else {
             write!(f, "^")?;
             for w in self.ranges.windows(2) {
-                write!(f, "{}", CharRange::from_range(Char::next(w[0].to), Char::prev(w[1].from)))?;
+                write!(f, "{}", CharRange::from_range(Char::next(w[0].end), Char::prev(w[1].start)))?;
             }
         }
         write!(f, "]")
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Regex {
-    Empty,
-    Any,
-    Set {
-        set: CharSet,
-    },
-    Literal {
-        chars: Vec<char>,
-        icase: bool,
-    },
-    Repeat {
-        e: Box<Regex>,
-        min: u32,
-        max: u32,
-        greedy: bool,
-    },
-    Concat {
-        es: Vec<Regex>,
-    },
-    Alternate {
-        es: Vec<Regex>,
-    },
-}
-
-impl Regex {
-    pub fn parse(s: &str) -> Result<Regex, Error> {
-        parse::Parser::parse(s)
-    }
-
-    pub fn simplify(self, nest_limit: usize) -> Result<Regex, Error> {
-        use self::Regex::*;
-
-        fn simp(expr: Regex, recurse: usize, limit: usize) -> Result<Regex, Error> {
-            if recurse > limit {
-                return Err(Error::Unspecified(line!()));
-            }
-            let simplify = |e| simp(e, recurse + 1, limit);
-            Ok(match expr {
-                Repeat { e, min, max, greedy } => {
-                    if min == 1 && max == 1 {
-                        simplify(*e)?
-                    } else {
-                        Repeat {
-                            e: Box::new(simplify(*e)?),
-                            min,
-                            max,
-                            greedy,
-                        }
-                    }
-                }
-                Concat { es } => {
-                    let mut nes = Vec::with_capacity(es.len());
-                    let mut again = false; // Concat containing one or more Concat needs one more recursion
-                    for e in es {
-                        match (nes.pop(), simplify(e)?) {
-                            (None, e) => nes.push(e),
-                            (Some(Literal { chars: mut chars1, icase: icase1 }),
-                             Literal { chars: chars2, icase: icase2 }) => {
-                                if icase1 == icase2 {
-                                    chars1.extend(chars2);
-                                    nes.push(Literal {
-                                        chars: chars1,
-                                        icase: icase1,
-                                    });
-                                } else {
-                                    nes.push(Literal {
-                                        chars: chars1,
-                                        icase: icase1,
-                                    });
-                                    nes.push(Literal {
-                                        chars: chars2,
-                                        icase: icase2,
-                                    });
-                                }
-                            }
-                            (Some(Concat { es: es1 }), Concat { es: es2 }) => {
-                                nes.extend(es1);
-                                nes.extend(es2);
-                                again = true;
-                            }
-                            (Some(Concat { es: es1 }), e2) => {
-                                nes.extend(es1);
-                                nes.push(e2);
-                                again = true;
-                            }
-                            (Some(e1), Concat { es: es2 }) => {
-                                nes.push(e1);
-                                nes.extend(es2);
-                                again = true;
-                            }
-                            (Some(e1), e2) => {
-                                nes.push(e1);
-                                nes.push(e2);
-                            }
-                        }
-                    }
-                    let e: Regex;
-                    if nes.len() == 1 {
-                        e = nes.pop().unwrap()
-                    } else {
-                        nes.shrink_to_fit();
-                        e = Concat { es: nes }
-                    }
-                    if again {
-                        simplify(e)?
-                    } else {
-                        e
-                    }
-                }
-                Alternate { es } => {
-                    let mut nes = Vec::with_capacity(es.len());
-                    for e in es {
-                        let e = simplify(e)?;
-                        if let Alternate { es: es2 } = e {
-                            for e in es2 {
-                                nes.push(simplify(e)?);
-                            }
-                        } else {
-                            nes.push(e);
-                        }
-                    }
-                    nes.shrink_to_fit();
-                    Alternate { es: nes }
-                }
-                Set { mut set } => {
-                    set.ranges.shrink_to_fit();
-                    Set { set: set }
-                }
-                e => e,
-            })
-        }
-        simp(self, 0, nest_limit)
-    }
-
-    #[inline]
-    fn precedence(&self) -> u32 {
-        use self::Regex::*;
-
-        match *self {
-            Empty | Any | Set { .. } => 0,
-            Literal { ref chars, .. } => {
-                if chars.len() < 2 {
-                    0
-                } else {
-                    1
-                }
-            }
-            Repeat { .. } => 1,
-            Concat { .. } => 2,
-            Alternate { .. } => 3,
-        }
-    }
-}
-
-impl fmt::Display for Regex {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::Regex::*;
-
-        let p = self.precedence();
-
-        match *self {
-            Empty => Ok(()),
-            Any => write!(f, "."),
-            Set { ref set } => write!(f, "{}", set),
-            Literal { ref chars, icase } => {
-                if icase {
-                    write!(f, "((?i)")?;
-                }
-                for &c in chars {
-                    write!(f, "{:#}", Char::new(c))?;
-                }
-                if icase {
-                    write!(f, ")")?;
-                }
-                Ok(())
-            }
-            Repeat { ref e, min, max, greedy } => {
-                let n = e.precedence();
-                if p > n {
-                    write!(f, "{}", e)?;
-                } else {
-                    write!(f, "({})", e)?;
-                }
-                if min == 0 && max == 1 {
-                    write!(f, "?")?;
-                } else if min == 0 && max == 0 {
-                    write!(f, "*")?;
-                } else if min == 1 && max == 0 {
-                    write!(f, "+")?;
-                } else if min == max {
-                    write!(f, "{{{}}}", min)?;
-                } else {
-                    write!(f, "{{{},{}}}", min, max)?;
-                }
-                if !greedy {
-                    write!(f, "?")?;
-                }
-                Ok(())
-            }
-            Concat { ref es } => {
-                for expr in es {
-                    if p > expr.precedence() {
-                        write!(f, "{}", expr)?;
-                    } else {
-                        write!(f, "({})", expr)?;
-                    }
-                }
-                Ok(())
-            }
-            Alternate { ref es } => {
-                for (i, expr) in es.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, "|")?;
-                    }
-                    if p > expr.precedence() {
-                        write!(f, "{}", expr)?;
-                    } else {
-                        write!(f, "({})", expr)?;
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests;

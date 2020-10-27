@@ -1,13 +1,15 @@
 use super::*;
 
+#[derive(Debug, Clone)]
 pub struct LexerDef {
-    lexemes: Vec<LexemeDef>,
+    pub lexemes: Vec<LexemeDef>,
 }
 
+#[derive(Debug, Clone)]
 pub struct LexemeDef {
-    index: usize,
-    name: String,
-    regex: Regex,
-    action: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub regex: Regex,
+    pub action: Option<String>,
 }
 

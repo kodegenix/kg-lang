@@ -1,81 +1,98 @@
-use kg_diag::{CharReader, MemCharReader, ParseDiag, IoErrorDetail};
-
 use super::*;
-use super::Regex::*;
 
-#[derive(Debug)]
-pub enum Error {
-    Unspecified(u32),
-    IoError,
+use std::collections::HashMap;
+
+
+//FIXME (jc)
+#[derive(Debug, Clone, Detail, Display)]
+#[diag(code_offset = 1200)]
+pub enum ParseErrorDetail {
+    #[diag(code = 1, severity = 'E')]
+    #[display(fmt = "{_0}")]
+    Unspecified(u32)
 }
 
-impl From<ParseDiag> for Error {
-    fn from(_: ParseDiag) -> Error {
-        Error::IoError
-    }
-}
+pub type Error = ParseDiag;
 
-impl From<IoErrorDetail> for Error {
-    fn from(_: IoErrorDetail) -> Error {
-        Error::IoError
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Flags {
-    icase: bool,
-}
-
-impl Flags {
-    fn new() -> Flags {
-        Flags { icase: false }
-    }
-}
-
-
-#[derive(Debug)]
-enum ParseExpr {
-    Regex(Regex),
-    Group {
-        flags: Flags,
-    },
-}
-
-pub struct Parser {
-    stack: Vec<ParseExpr>,
+pub struct Parser<'a> {
+    refs: HashMap<&'a str, &'a Regex>,
+    allow_whitespace: bool,
+    allow_refs: bool,
+    stack: Vec<ParseExpr<'a>>,
     flags: Flags,
 }
 
-impl Parser {
-    pub fn parse(input: &str) -> Result<Regex, Error> {
-        if input.is_empty() {
-            Ok(Regex::Empty)
-        } else {
-            Parser {
-                stack: vec![],
-                flags: Flags::new(),
-            }.parse_regex(input)
+impl<'a> Parser<'a> {
+    pub fn new() -> Parser<'a> {
+        Parser {
+            refs: HashMap::new(),
+            allow_whitespace: false,
+            allow_refs: false,
+            stack: Vec::new(),
+            flags: Flags::new(),
         }
     }
 
-    fn parse_regex(mut self, input: &str) -> Result<Regex, Error> {
-        let mut r = MemCharReader::new(input.as_bytes());
-        while let Some(c) = r.next_char()? {
+    pub fn with_refs(refs: HashMap<&'a str, &'a Regex>) -> Parser<'a> {
+        Parser {
+            refs,
+            allow_whitespace: true,
+            allow_refs: true,
+            stack: Vec::new(),
+            flags: Flags::new(),
+        }
+    }
+
+    pub fn allow_whitespace(&mut self, allow: bool) -> &mut Self {
+        self.allow_whitespace = allow;
+        self
+    }
+
+    pub fn allow_refs(&mut self, allow: bool) -> &mut Self {
+        self.allow_refs = allow;
+        self
+    }
+
+    pub fn parse_str(&'a mut self, input: &str) -> Result<Regex, Error> {
+        if input.is_empty() {
+            Ok(Regex::Empty)
+        } else {
+            let mut r = MemCharReader::new(input.as_bytes());
+            self.parse(&mut r)
+        }
+    }
+
+    pub fn parse(&'a mut self, reader: &mut dyn CharReader) -> Result<Regex, Error> {
+        if reader.eof() {
+            Ok(Regex::Empty)
+        } else {
+            self.parse_regex(reader)
+        }
+    }
+
+    fn reset(&mut self) {
+        self.stack.clear();
+        self.flags = Flags::new();
+    }
+
+    fn parse_regex(&'a mut self, reader: &mut dyn CharReader) -> Result<Regex, Error> {
+        self.reset();
+        while let Some(c) = reader.next_char()? {
             let expr = match c {
                 '|' => self.alternate()?,
                 '(' => self.group_open()?,
                 ')' => self.group_close()?,
-                '[' => self.char_set(&mut r)?,
-                '?' | '*' | '+' | '{' => self.repeat(&mut r)?,
-                '.' => ParseExpr::Regex(Any),
+                '[' => self.parse_char_set(reader)?,
+                '?' | '*' | '+' | '{' => self.parse_repeat(reader)?,
+                '.' => ParseExpr::Regex(Regex::Any),
                 '\\' => {
-                    ParseExpr::Regex(Literal {
-                        chars: vec![self.escape(&mut r)?],
+                    ParseExpr::Regex(Regex::Literal {
+                        chars: vec![self.parse_escape(reader)?],
                         icase: self.flags.icase,
                     })
                 }
                 _ => {
-                    ParseExpr::Regex(Literal {
+                    ParseExpr::Regex(Regex::Literal {
                         chars: vec![c],
                         icase: self.flags.icase,
                     })
@@ -88,21 +105,21 @@ impl Parser {
         let mut nes = Vec::new();
         while let Some(e) = self.stack.pop() {
             match e {
-                ParseExpr::Regex(Alternate { mut es }) => {
+                ParseExpr::Regex(Regex::Alternate(mut es)) => {
                     if !nes.is_empty() {
                         es.push(Parser::concat(nes)?);
                         nes = Vec::new();
                     }
-                    nes.push(Alternate { es: es });
+                    nes.push(Regex::Alternate(es));
                 }
                 ParseExpr::Regex(e @ _) => nes.push(e),
-                _ => return Err(Error::Unspecified(line!())),
+                _ => return Err(ParseErrorDetail::Unspecified(line!()).into()),
             }
         }
         Parser::concat(nes)?.simplify(1000)
     }
 
-    fn escape(&mut self, r: &mut dyn CharReader) -> Result<char, Error> {
+    fn parse_escape(&mut self, r: &mut dyn CharReader) -> Result<char, Error> {
         if let Some(c) = r.next_char()? {
             match c {
                 '\\' | '.' | '-' | '+' | '*' | '?' | '[' | ']' | '{' | '}' | '(' | ')' | '^' => {
@@ -125,62 +142,40 @@ impl Parser {
                 // self.bump();
                 // Ok(Build::Expr(Expr::Class(self.parse_perl_class(c))))
                 // }
-                _ => return Err(Error::Unspecified(line!())),
+                _ => return Err(ParseErrorDetail::Unspecified(line!()).into()),
             }
         }
-        return Err(Error::Unspecified(line!()));
-    }
-
-    fn alternate(&mut self) -> Result<ParseExpr, Error> {
-        let mut nes = Vec::new();
-        while let Some(e) = self.stack.pop() {
-            match e {
-                ParseExpr::Group { .. } => {
-                    self.stack.push(e);
-                    break;
-                }
-                ParseExpr::Regex(Alternate { mut es }) => {
-                    if !nes.is_empty() {
-                        es.push(Parser::concat(nes)?);
-                    }
-                    return Ok(ParseExpr::Regex(Alternate { es: es }));
-                }
-                ParseExpr::Regex(e @ _) => {
-                    nes.push(e);
-                }
-            }
-        }
-        Ok(ParseExpr::Regex(Alternate { es: vec!(Parser::concat(nes)?) }))
+        return Err(ParseErrorDetail::Unspecified(line!()).into());
     }
 
     fn group_open(&mut self) -> Result<ParseExpr, Error> {
-        Ok(ParseExpr::Group { flags: self.flags })
+        Ok(ParseExpr::Group(self.flags))
     }
 
     fn group_close(&mut self) -> Result<ParseExpr, Error> {
         let mut nes = Vec::new();
         while let Some(e) = self.stack.pop() {
             match e {
-                ParseExpr::Group { flags } => {
+                ParseExpr::Group(flags) => {
                     self.flags = flags;
-                    return Ok(ParseExpr::Regex(Concat { es: vec!(Parser::concat(nes)?) }));
+                    return Ok(ParseExpr::Regex(Regex::Concat(vec!(Parser::concat(nes)?))));
                 }
-                ParseExpr::Regex(Alternate { mut es }) => {
+                ParseExpr::Regex(Regex::Alternate(mut es)) => {
                     if !nes.is_empty() {
                         es.push(Parser::concat(nes)?);
                         nes = Vec::new();
                     }
-                    nes.push(Alternate { es: es });
+                    nes.push(Regex::Alternate(es));
                 }
                 ParseExpr::Regex(e @ _) => {
                     nes.push(e);
                 }
             }
         }
-        Err(Error::Unspecified(line!()))
+        Err(ParseErrorDetail::Unspecified(line!()).into())
     }
 
-    fn repeat(&mut self, r: &mut dyn CharReader) -> Result<ParseExpr, Error> {
+    fn parse_repeat(&'a mut self, r: &mut dyn CharReader) -> Result<ParseExpr<'a>, Error> {
         fn scan_repeat(r: &mut dyn CharReader) -> Result<(u32, Option<u32>), Error> {
             let mut min = std::u32::MAX;
             let mut max = std::u32::MAX;
@@ -212,20 +207,20 @@ impl Parser {
                         n = 2;
                         max = 0;
                     } else {
-                        return Err(Error::Unspecified(line!()));
+                        return Err(ParseErrorDetail::Unspecified(line!()).into());
                     }
                 } else if c == '}' {
                     if n == 0 {
-                        return Err(Error::Unspecified(line!()));
+                        return Err(ParseErrorDetail::Unspecified(line!()).into());
                     }
                     return Ok((min, if max < std::u32::MAX { Some(max) } else { None }));
                 }
             }
-            Err(Error::Unspecified(line!()))
+            Err(ParseErrorDetail::Unspecified(line!()).into())
         }
 
         if self.stack.is_empty() {
-            Err(Error::Unspecified(line!()))
+            Err(ParseErrorDetail::Unspecified(line!()).into())
         } else {
             let min: u32;
             let max: u32;
@@ -247,10 +242,10 @@ impl Parser {
                 _ => {
                     let r = scan_repeat(r)?;
                     min = r.0;
-                    /// max should not be less then min (if set)
+                    // max should not be less then min (if set)
                     if let Some(m) = r.1 {
                         if m != 0 && m < min {
-                            return Err(Error::Unspecified(line!()));
+                            return Err(ParseErrorDetail::Unspecified(line!()).into());
                         }
                         max = m;
                     } else {
@@ -266,7 +261,7 @@ impl Parser {
 
             match self.stack.pop().unwrap() {
                 ParseExpr::Regex(r @ _) => {
-                    Ok(ParseExpr::Regex(Repeat {
+                    Ok(ParseExpr::Regex(Regex::Repeat {
                         e: Box::new(r),
                         min,
                         max,
@@ -274,13 +269,13 @@ impl Parser {
                     }))
                 }
                 _ => {
-                    Err(Error::Unspecified(line!()))
+                    Err(ParseErrorDetail::Unspecified(line!()).into())
                 }
             }
         }
     }
 
-    fn char_set(&mut self, r: &mut dyn CharReader) -> Result<ParseExpr, Error> {
+    fn parse_char_set(&mut self, r: &mut dyn CharReader) -> Result<ParseExpr, Error> {
         let mut set = CharSet::new();
         let mut p = '\0';
         let mut range = false;
@@ -295,21 +290,21 @@ impl Parser {
                 }
                 ']' => {
                     if range {
-                        return Err(Error::Unspecified(line!()));
+                        return Err(ParseErrorDetail::Unspecified(line!()).into());
                     } else {
                         break;
                     }
                 }
                 '-' => {
                     if !found {
-                        return Err(Error::Unspecified(line!()));
+                        return Err(ParseErrorDetail::Unspecified(line!()).into());
                     } else {
                         range = true;
                         continue;
                     }
                 }
                 '\\' => {
-                    c = self.escape(r)?;
+                    c = self.parse_escape(r)?;
                 }
                 _ => {}
             }
@@ -333,20 +328,65 @@ impl Parser {
         }
 
         if !set.is_empty() {
-            Ok(ParseExpr::Regex(Set { set: set }))
+            Ok(ParseExpr::Regex(Regex::Set(set)))
         } else {
-            Err(Error::Unspecified(line!()))
+            Err(ParseErrorDetail::Unspecified(line!()).into())
         }
+    }
+
+    fn alternate(&'a mut self) -> Result<ParseExpr<'a>, Error> {
+        let mut nes = Vec::new();
+        while let Some(e) = self.stack.pop() {
+            match e {
+                ParseExpr::Group { .. } => {
+                    self.stack.push(e);
+                    break;
+                }
+                ParseExpr::Regex(Regex::Alternate(mut es)) => {
+                    if !nes.is_empty() {
+                        es.push(Parser::concat(nes)?);
+                    }
+                    return Ok(ParseExpr::Regex(Regex::Alternate(es)));
+                }
+                ParseExpr::Regex(e @ _) => {
+                    nes.push(e);
+                }
+            }
+        }
+        Ok(ParseExpr::Regex(Regex::Alternate(vec!(Parser::concat(nes)?))))
     }
 
     fn concat(mut es: Vec<Regex>) -> Result<Regex, Error> {
         match es.len() {
-            0 => Err(Error::Unspecified(line!())),
+            0 => Err(ParseErrorDetail::Unspecified(line!()).into()),
             1 => Ok(es.pop().unwrap()),
             _ => {
                 es.reverse();
-                Ok(Concat { es: es })
+                Ok(Regex::Concat(es))
             }
         }
     }
+}
+
+
+#[derive(Debug, Default, Clone, Copy)]
+struct Flags {
+    icase: bool,
+}
+
+impl Flags {
+    fn new() -> Flags {
+        Flags {
+            icase: false
+        }
+    }
+}
+
+
+#[derive(Debug)]
+enum ParseExpr<'a> {
+    //Char(char),
+    Regex(Regex),
+    Group(Flags),
+    Ref(&'a str),
 }

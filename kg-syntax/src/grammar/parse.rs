@@ -36,13 +36,6 @@ impl From<IoErrorDetail> for Error {
     }
 }
 
-impl From<regex::Error> for Error {
-    fn from(err: regex::Error) -> Error {
-        error!("{:?}", err);
-        Error::RegexError
-    }
-}
-
 pub fn parse(r: &mut dyn CharReader) -> Result<GrammarRef, Error> {
     let g = GrammarRef::new();
 
