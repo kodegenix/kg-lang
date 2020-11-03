@@ -70,8 +70,6 @@ impl std::fmt::Display for State {
 }
 
 
-
-
 struct Builder {
     states: Vec<StateEx>,
 }

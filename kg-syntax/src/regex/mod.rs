@@ -6,6 +6,7 @@ mod parse;
 
 pub use self::parse::Error as ParseError;
 pub use self::parse::ParseErrorDetail;
+pub use self::parse::Parser as RegexParser;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Regex {

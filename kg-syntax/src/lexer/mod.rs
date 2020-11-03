@@ -11,6 +11,8 @@ pub mod prog;
 pub mod nfa;
 pub mod dfa;
 
+pub use self::commons::EMPTY_GOTO;
+
 
 //FIXME (jc)
 #[derive(Debug)]

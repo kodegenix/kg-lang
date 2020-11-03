@@ -1,5 +1,4 @@
 use super::*;
-use std::path::{Path, PathBuf};
 
 pub type Error = ParseDiag;
 
@@ -15,6 +14,7 @@ pub fn parse_lexer_def(reader: &mut dyn CharReader) -> Result<LexerDef, Error> {
         lexemes.push(lexeme);
     }
     Ok(LexerDef {
+        name: String::new(),
         lexemes,
     })
 }
@@ -26,7 +26,7 @@ pub fn parse_lexeme_def_opt(reader: &mut dyn CharReader) -> Result<Option<Lexeme
         regex: Regex::Empty,
         action: None,
     };
-    reader.skip_whitespace_nonl()?;
+    reader.skip_whitespace()?;
     lexeme.name.push_str(&reader.scan(&mut |c| c.is_alphabetic())?);
     lexeme.name.push_str(&reader.scan(&mut |c| c.is_alphanumeric())?);
     if lexeme.name.is_empty() {
@@ -52,10 +52,51 @@ pub fn parse_lexeme_def_opt(reader: &mut dyn CharReader) -> Result<Option<Lexeme
     } else {
         reader.next_char()?;
     }
+    reader.skip_whitespace()?;
+
+    let p1 = reader.position();
+    while let Some(c) = reader.next_char()? {
+        if c == '\\' {
+            reader.next_char()?;
+        } else if c.is_whitespace() {
+            break;
+        }
+    }
+    let p2 = reader.position();
+
+    lexeme.regex = Regex::parse(reader.slice_pos(p1, p2)?.as_ref())?;
+
     reader.skip_whitespace_nonl()?;
 
+    let p1 = reader.position();
+    if let Some('{') = reader.peek_char(0)? {
+        //FIXME (jc) skip string literals (at least quoted curly braces)
+        let mut level = 1;
+        while let Some(c) = reader.next_char()? {
+            if c == '{' {
+                level += 1;
+            } else if c == '}' {
+                level -= 1;
+                if level == 0 {
+                    break;
+                }
+            }
+        }
+        if level != 0 {
+            return Err(Error::new(ErrorDetail::Undefined));
+        }
+    }
     reader.skip_until(&mut |c| c == '\n')?;
-    reader.skip_whitespace()?;
+    let p2 = reader.position();
+
+    let action = reader.slice_pos(p1, p2)?;
+    let action = action.trim();
+    lexeme.action = if action.is_empty() {
+        None
+    } else {
+        Some(action.to_string())
+    };
+
     Ok(Some(lexeme))
 }
 
@@ -63,13 +104,19 @@ pub fn parse_lexeme_def_opt(reader: &mut dyn CharReader) -> Result<Option<Lexeme
 mod tests {
     use super::*;
 
+    //FIXME (jc)
     #[test]
     fn num_parse() {
         let mut f = FileBuffer::open("resources/num.lex").unwrap();
         let mut r = f.char_reader();
         let mut l = parse_lexer_def(&mut r).unwrap();
-        for l in l.lexemes.iter() {
-            println!("{:?}", l);
-        }
+        l.name = "Num".into();
+        // for l in l.lexemes.iter() {
+        //     println!("{:?}", l);
+        // }
+        let dfa = build_dfa(&l);
+        //println!("{}", dfa);
+
+        println!("{}", gen_dfa_lexer(&l, &dfa));
     }
 }

@@ -14,11 +14,12 @@ pub enum ParseErrorDetail {
 
 pub type Error = ParseDiag;
 
+//TODO (jc) finish implementation with whitespace and refs
 pub struct Parser<'a> {
     refs: HashMap<&'a str, &'a Regex>,
-    allow_whitespace: bool,
     allow_refs: bool,
-    stack: Vec<ParseExpr<'a>>,
+    allow_whitespace: bool,
+    stack: Vec<ParseExpr>,
     flags: Flags,
 }
 
@@ -26,8 +27,8 @@ impl<'a> Parser<'a> {
     pub fn new() -> Parser<'a> {
         Parser {
             refs: HashMap::new(),
-            allow_whitespace: false,
             allow_refs: false,
+            allow_whitespace: false,
             stack: Vec::new(),
             flags: Flags::new(),
         }
@@ -36,8 +37,8 @@ impl<'a> Parser<'a> {
     pub fn with_refs(refs: HashMap<&'a str, &'a Regex>) -> Parser<'a> {
         Parser {
             refs,
-            allow_whitespace: true,
             allow_refs: true,
+            allow_whitespace: true,
             stack: Vec::new(),
             flags: Flags::new(),
         }
@@ -53,7 +54,7 @@ impl<'a> Parser<'a> {
         self
     }
 
-    pub fn parse_str(&'a mut self, input: &str) -> Result<Regex, Error> {
+    pub fn parse_str(&mut self, input: &str) -> Result<Regex, Error> {
         if input.is_empty() {
             Ok(Regex::Empty)
         } else {
@@ -62,7 +63,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&'a mut self, reader: &mut dyn CharReader) -> Result<Regex, Error> {
+    pub fn parse(&mut self, reader: &mut dyn CharReader) -> Result<Regex, Error> {
         if reader.eof() {
             Ok(Regex::Empty)
         } else {
@@ -75,7 +76,7 @@ impl<'a> Parser<'a> {
         self.flags = Flags::new();
     }
 
-    fn parse_regex(&'a mut self, reader: &mut dyn CharReader) -> Result<Regex, Error> {
+    fn parse_regex(&mut self, reader: &mut dyn CharReader) -> Result<Regex, Error> {
         self.reset();
         while let Some(c) = reader.next_char()? {
             let expr = match c {
@@ -175,7 +176,7 @@ impl<'a> Parser<'a> {
         Err(ParseErrorDetail::Unspecified(line!()).into())
     }
 
-    fn parse_repeat(&'a mut self, r: &mut dyn CharReader) -> Result<ParseExpr<'a>, Error> {
+    fn parse_repeat(&mut self, r: &mut dyn CharReader) -> Result<ParseExpr, Error> {
         fn scan_repeat(r: &mut dyn CharReader) -> Result<(u32, Option<u32>), Error> {
             let mut min = std::u32::MAX;
             let mut max = std::u32::MAX;
@@ -334,7 +335,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn alternate(&'a mut self) -> Result<ParseExpr<'a>, Error> {
+    fn alternate(&mut self) -> Result<ParseExpr, Error> {
         let mut nes = Vec::new();
         while let Some(e) = self.stack.pop() {
             match e {
@@ -384,9 +385,9 @@ impl Flags {
 
 
 #[derive(Debug)]
-enum ParseExpr<'a> {
+enum ParseExpr {
     //Char(char),
     Regex(Regex),
     Group(Flags),
-    Ref(&'a str),
+    //Ref(String),
 }

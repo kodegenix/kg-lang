@@ -36,6 +36,10 @@ impl Dfa {
             Ok(None)
         }
     }
+
+    pub fn states(&self) -> &[State] {
+        &self.states
+    }
 }
 
 impl std::fmt::Display for Dfa {
@@ -48,7 +52,7 @@ impl std::fmt::Display for Dfa {
 }
 
 #[derive(Debug, Clone)]
-struct State {
+pub struct State {
     edges: [u32; 256],
     accept: Option<Accept>,
 }
@@ -68,6 +72,14 @@ impl State {
             edges,
             accept: state.accepts.get(0).cloned(),
         }
+    }
+
+    pub fn edges(&self) -> &[u32] {
+        &self.edges
+    }
+
+    pub fn accept(&self) -> Option<&Accept> {
+        self.accept.as_ref()
     }
 }
 

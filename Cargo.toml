@@ -1,2 +1,2 @@
 [workspace]
-members = ["kg-syntax", "kg-syntax-gen"]
+members = ["kg-syntax", "kg-syntax-gen", "kg-syntax-gen-test"]
