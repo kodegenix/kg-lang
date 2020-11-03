@@ -11,10 +11,13 @@ use self::num::*;
 fn main() {
     println!("Hello, world!");
     let mut lexer = NumLexer::new();
-    let s = "12123 231231";
-    let mut r = MemCharReader::new(s.as_bytes());
+    let s = "12123231231";
+    let mut r = MemByteReader::new(s.as_bytes());
     loop {
         let t = lexer.next_token(&mut r).unwrap();
         println!("{:?}", t);
+        if t.term() == Term::End {
+            break;
+        }
     }
 }
