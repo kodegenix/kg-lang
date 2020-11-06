@@ -8,6 +8,7 @@ use std::fmt::Write;
 pub struct LexerDef {
     pub name: String,
     pub lexemes: Vec<LexemeDef>,
+    pub default_action: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +30,7 @@ pub fn build_dfa(lexer: &LexerDef) -> Dfa {
     Dfa::from_nfa(&nfa)
 }
 
-pub fn gen_dfa_lexer(lexer: &LexerDef, dfa: &Dfa) -> String {
+pub fn gen_dfa_lexer(lexer: &LexerDef, dfa: &Dfa) -> std::io::Result<String> {
     use regex::{Regex, Captures};
     use std::borrow::Cow;
 
@@ -70,21 +71,41 @@ pub fn gen_dfa_lexer(lexer: &LexerDef, dfa: &Dfa) -> String {
     let mut actions = String::with_capacity(10 * 1024);
     for (i, l) in lexer.lexemes.iter().enumerate() {
         if let Some(a) = l.action.as_ref() {
-            write!(actions, "{} => {{ {} }}\n", i + 1, a).unwrap();
+            write!(actions, "{} => {}\n", i + 1, a).unwrap();
         } else {
             write!(actions, "{} => return Ok(Token::new(Term::{}, start_pos, end_pos)),\n", i + 1, &l.name).unwrap();
         }
     }
+    if let Some(ref a) = lexer.default_action {
+        write!(actions, "{} => {}\n", num_states, a).unwrap();
+    } else {
+        write!(actions, "{} => panic!(format!(\"unrecognized char {{:?}}\", c)),\n", num_states).unwrap();
+    }
 
-    VAR_RE.replace_all(DFA_LEXER_TPL.trim(), |c: &Captures| {
-        match &c[1] {
-            "name" => Cow::Borrowed(lexer.name.as_str()),
-            "term_list" => Cow::Borrowed(terms.as_str()),
-            "action_list" => Cow::Borrowed(actions.trim()),
-            "num_states" => Cow::Owned(num_states.to_string()),
-            "state_type" => Cow::Borrowed("i8"),
-            "trans_tab" => Cow::Borrowed(tab.as_str()),
-            _ => Cow::Borrowed("???"),
+    let code = VAR_RE.replace_all(DFA_LEXER_TPL.trim(), |c: &Captures| {
+        if let Some(m) = c.get(1) {
+            let prev_line_pos = (&DFA_LEXER_TPL[..m.start()]).rfind('\n').unwrap_or(m.start());
+            let prefix = &DFA_LEXER_TPL[prev_line_pos + 1..m.start() - 1];
+            let mut ws = String::new();
+            if prefix.trim().is_empty() {
+                ws.push('\n');
+                ws.push_str(prefix);
+            } else {
+                ws.push('\n');
+            };
+            match m.as_str() {
+                "name" => Cow::Borrowed(lexer.name.as_str()),
+                "term_list" => Cow::Borrowed(terms.as_str()),
+                "action_list" => Cow::Owned(actions.trim().split('\n').collect::<Vec<&str>>().join(&ws)),
+                "num_states" => Cow::Owned(num_states.to_string()),
+                "state_type" => Cow::Borrowed("i8"),
+                "trans_tab" => Cow::Borrowed(tab.as_str()),
+                s @ _ => panic!(format!("unknown variable '{}'", s)),
+            }
+        } else {
+            unreachable!();
         }
-    }).into_owned()
+    }).into_owned();
+
+    Ok(code)
 }

@@ -34,7 +34,7 @@ pub fn gen_lexer(input_path: &Path, output_path: &Path) -> Result<(), Error> {
     }
     l.name = l.name.to_class_case();
     let dfa = build_dfa(&l);
-    let code = gen_dfa_lexer(&l, &dfa);
+    let code = gen_dfa_lexer(&l, &dfa).map_err(|e| ParseDiag::new(IoErrorDetail::from(e.kind())))?;
     fs::write(output_path, code)?;
     Ok(())
 }

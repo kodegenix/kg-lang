@@ -5,11 +5,10 @@ mod num {
     include!(concat!(env!("OUT_DIR"), "/num.rs"));
 }
 
-use kg_diag::*;
 use self::num::*;
+use kg_diag::*;
 
 fn main() {
-    println!("Hello, world!");
     let mut lexer = NumLexer::new();
     let s = "12123231231";
     let mut r = MemByteReader::new(s.as_bytes());

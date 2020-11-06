@@ -1,5 +1,5 @@
 pub(crate) const DFA_LEXER_TPL: &'static str = r#"
-use kg_diag::{ByteReader, LexTerm, LexToken, ParseDiag};
+use kg_diag::*;
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Term {
@@ -29,16 +29,15 @@ impl ${name}Lexer {
 
         let mut s: ${state_type} = 0;
         loop {
-            let c = reader.peek_byte(0)?.unwrap_or(0);
+            let c = reader.peek_byte(0)?.unwrap_or(0xFF);
             s = TRANS[s as usize][c as usize];
             if s < 0 {
                 let a = -s;
                 s = 0;
                 let end_pos = reader.position();
                 match a {
-${action_list}
-${num_states} => panic!("unrecognized char"),
-_ => unreachable!(),
+                    ${action_list}
+                    _ => unreachable!(),
                 }
             }
             reader.next_byte()?;

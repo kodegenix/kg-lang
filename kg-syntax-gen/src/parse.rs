@@ -10,12 +10,23 @@ pub enum ErrorDetail {
 
 pub fn parse_lexer_def(reader: &mut dyn CharReader) -> Result<LexerDef, Error> {
     let mut lexemes = Vec::new();
+    let mut default_action = None;
     while let Some(lexeme) = parse_lexeme_def_opt(reader)? {
-        lexemes.push(lexeme);
+        if lexeme.regex == Regex::Empty {
+            if default_action.is_some() {
+                // cannot have more then one catch-all rule
+                return Err(Error::new(ErrorDetail::Undefined));
+            } else {
+                default_action = lexeme.action;
+            }
+        } else {
+            lexemes.push(lexeme);
+        }
     }
     Ok(LexerDef {
         name: String::new(),
         lexemes,
+        default_action,
     })
 }
 
@@ -27,45 +38,68 @@ pub fn parse_lexeme_def_opt(reader: &mut dyn CharReader) -> Result<Option<Lexeme
         action: None,
     };
     reader.skip_whitespace()?;
-    lexeme.name.push_str(&reader.scan(&mut |c| c.is_alphabetic())?);
-    lexeme.name.push_str(&reader.scan(&mut |c| c.is_alphanumeric())?);
-    if lexeme.name.is_empty() {
-        return Ok(None);
-    }
-    reader.skip_whitespace_nonl()?;
-    match reader.peek_char(0)? {
-        Some(s) if s == '"' || s == '\'' => {
+    if let Some('.') = reader.peek_char(0)? {
+        // parse default (catch all) rule
+        reader.skip_chars(1)?;
+        reader.skip_whitespace()?;
+        if let Some(':') = reader.peek_char(0)? {
             reader.next_char()?;
-            let p1 = reader.position();
-            reader.skip_until(&mut |c| c == s)?;
-            let p2 = reader.position();
-            lexeme.label = Some(reader.slice_pos(p1, p2)?.to_string());
-            reader.next_char()?;
-            reader.skip_whitespace_nonl()?;
-        },
-        Some(':') => {},
-        Some(_) => return Err(Error::new(ErrorDetail::Undefined)),
-        None => return Err(Error::new(ErrorDetail::Undefined)),
-    }
-    if !reader.match_char(':')? {
-        return Err(Error::new(ErrorDetail::Undefined));
-    } else {
-        reader.next_char()?;
-    }
-    reader.skip_whitespace()?;
-
-    let p1 = reader.position();
-    while let Some(c) = reader.next_char()? {
-        if c == '\\' {
-            reader.next_char()?;
-        } else if c.is_whitespace() {
-            break;
+            lexeme.action = parse_action(reader)?;
+            if lexeme.action.is_none() {
+                // catch-all rule must have an action
+                return Err(Error::new(ErrorDetail::Undefined));
+            }
+        } else {
+            // catch-all rule name '.' must be followed by ':' and action
+            return Err(Error::new(ErrorDetail::Undefined));
         }
+    } else {
+        // parse regular rule
+        lexeme.name.push_str(&reader.scan(&mut |c| c.is_alphabetic())?);
+        lexeme.name.push_str(&reader.scan(&mut |c| c.is_alphanumeric())?);
+        if lexeme.name.is_empty() {
+            return Ok(None);
+        }
+        reader.skip_whitespace_nonl()?;
+        match reader.peek_char(0)? {
+            Some(s) if s == '"' || s == '\'' => {
+                reader.next_char()?;
+                let p1 = reader.position();
+                reader.skip_until(&mut |c| c == s)?;
+                let p2 = reader.position();
+                lexeme.label = Some(reader.slice_pos(p1, p2)?.to_string());
+                reader.next_char()?;
+                reader.skip_whitespace_nonl()?;
+            },
+            Some(':') => {},
+            Some(_) => return Err(Error::new(ErrorDetail::Undefined)),
+            None => return Err(Error::new(ErrorDetail::Undefined)),
+        }
+        if !reader.match_char(':')? {
+            return Err(Error::new(ErrorDetail::Undefined));
+        } else {
+            reader.next_char()?;
+        }
+        reader.skip_whitespace()?;
+
+        let p1 = reader.position();
+        while let Some(c) = reader.next_char()? {
+            if c == '\\' {
+                reader.next_char()?;
+            } else if c.is_whitespace() {
+                break;
+            }
+        }
+        let p2 = reader.position();
+
+        lexeme.regex = Regex::parse(reader.slice_pos(p1, p2)?.as_ref())?;
+
+        lexeme.action = parse_action(reader)?;
     }
-    let p2 = reader.position();
+    Ok(Some(lexeme))
+}
 
-    lexeme.regex = Regex::parse(reader.slice_pos(p1, p2)?.as_ref())?;
-
+fn parse_action(reader: &mut dyn CharReader) -> Result<Option<String>, Error> {
     reader.skip_whitespace_nonl()?;
 
     let p1 = reader.position();
@@ -91,13 +125,11 @@ pub fn parse_lexeme_def_opt(reader: &mut dyn CharReader) -> Result<Option<Lexeme
 
     let action = reader.slice_pos(p1, p2)?;
     let action = action.trim();
-    lexeme.action = if action.is_empty() {
+    Ok(if action.is_empty() {
         None
     } else {
         Some(action.to_string())
-    };
-
-    Ok(Some(lexeme))
+    })
 }
 
 #[cfg(test)]
@@ -107,16 +139,14 @@ mod tests {
     //FIXME (jc)
     #[test]
     fn num_parse() {
-        let mut f = FileBuffer::open("resources/num.lex").unwrap();
+        use std::path::PathBuf;
+        let mut path = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_default());
+        path.push("resources/num.lex");
+
+        let mut f = FileBuffer::open(path).unwrap();
         let mut r = f.char_reader();
         let mut l = parse_lexer_def(&mut r).unwrap();
         l.name = "Num".into();
-        // for l in l.lexemes.iter() {
-        //     println!("{:?}", l);
-        // }
-        let dfa = build_dfa(&l);
-        //println!("{}", dfa);
-
-        println!("{}", gen_dfa_lexer(&l, &dfa));
+        println!("{:#?}", l);
     }
 }
