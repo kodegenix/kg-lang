@@ -1,6 +1,6 @@
 [package]
 name = "kg-syntax"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["jchlapinski <jakub.chlapinski@kodegenix.pl>"]
 description = """
 Runtime LR(1) parser generator library.
@@ -8,6 +8,10 @@ Runtime LR(1) parser generator library.
 readme = "../README.md"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/kodegenix/kg-syntax"
+exclude = [
+    "resources/**",
+    "tests/**",
+]
 edition = "2018"
 
 [dependencies]
@@ -18,4 +22,4 @@ kg-js = "0.1.1"
 kg-tree = "0.2.1"
 kg-utils = "0.4.0"
 log = "0.4.11"
-libc = "0.2.79"
+libc = "0.2.80"
