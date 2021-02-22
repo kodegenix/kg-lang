@@ -2,6 +2,18 @@ use super::*;
 
 pub mod parse;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lang {
+    JavaScript,
+    Rust,
+}
+
+#[derive(Debug)]
+pub struct Code {
+    pos: Position,
+    lang: Lang,
+    source: String,
+}
 
 #[derive(Debug)]
 pub struct Grammar {
@@ -10,8 +22,7 @@ pub struct Grammar {
     terminals: Vec<Lexeme>,
     productions: Vec<Production>,
     rules: Vec<Rule>,
-    globals: String,
-    strict_mode: bool,
+    globals: Option<Code>,
 }
 
 impl Grammar {
@@ -22,8 +33,7 @@ impl Grammar {
             terminals: Vec::new(),
             productions: Vec::new(),
             rules: Vec::new(),
-            globals: String::new(),
-            strict_mode: false,
+            globals: None,
         }
     }
 
@@ -67,12 +77,8 @@ impl Grammar {
         &self.rules[index]
     }
 
-    pub fn globals(&self) -> &str {
-        &self.globals
-    }
-
-    pub fn strict_mode(&self) -> bool {
-        self.strict_mode
+    pub fn globals(&self) -> Option<&Code> {
+        self.globals.as_ref()
     }
 }
 

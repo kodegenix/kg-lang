@@ -248,9 +248,6 @@ pub fn parse(r: &mut dyn CharReader) -> Result<GrammarRef, Error> {
         grammar.productions = productions;
         grammar.rules = rules;
         grammar.globals = pg.globals;
-        if let Some(true) = pg.options.strict_mode {
-            grammar.strict_mode = true;
-        }
 
         for m in pg.modes.iter() {
             if m.is_active() {
@@ -317,7 +314,8 @@ enum ParseTerminal {
     Id(bool),
     Var(bool),
     Arrow,
-    Action,
+    ActionStart(Lang),
+    ActionEnd,
     Literal,
     True,
     False,
@@ -696,7 +694,7 @@ impl Parser {
                 ParseTerminal::Globals => {
                     match ctx {
                         ParseContext::Main => {
-                            pg.globals = self.parse_globals(r)?;
+                            pg.globals = Some(self.parse_globals(r)?);
                         }
                         _ => return Err(Error::Unspecified(line!())),
                     }
@@ -894,7 +892,7 @@ impl Parser {
         Ok(opt)
     }
 
-    fn parse_globals(&mut self, r: &mut dyn CharReader) -> Result<String, Error> {
+    fn parse_globals(&mut self, r: &mut dyn CharReader) -> Result<Code, Error> {
         self.push_context(ParseContext::Globals);
         let t = self.expect_token(r, ParseTerminal::Action)?;
         self.pop_context();
@@ -1244,7 +1242,7 @@ struct ParseGrammar {
     modes: Vec<ParseMode>,
     channels: Vec<ParseChannel>,
     options: Options,
-    globals: String,
+    globals: Option<Code>,
 }
 
 impl ParseGrammar {
@@ -1253,7 +1251,7 @@ impl ParseGrammar {
             modes: Vec::with_capacity(32),
             channels: Vec::with_capacity(32),
             options: Options::default(),
-            globals: String::new(),
+            globals: None,
         }
     }
 }
