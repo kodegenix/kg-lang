@@ -314,7 +314,7 @@ enum ParseTerminal {
     Id(bool),
     Var(bool),
     Arrow,
-    ActionStart(Lang),
+    ActionStart,
     ActionEnd,
     Literal,
     True,
@@ -408,70 +408,21 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
     skip_ws(r, true)?;
 
     match r.peek_char(0)? {
-        Some('{') => {
-            match ctx {
-                ParseContext::Globals | ParseContext::LexerCommands | ParseContext::ParserRule => {
-                    let p1 = r.position();
-                    let mut level = 1;
-                    r.next_char()?;
-                    loop {
-                        match r.peek_char(0)? {
-                            Some('/') => {
-                                if !skip_ws(r, false)? {
-                                    r.next_char()?;
-                                }
-                            }
-                            Some('{') => {
-                                level += 1;
-                                r.next_char()?;
-                            }
-                            Some('}') => {
-                                level -= 1;
-                                r.next_char()?;
-                            }
-                            Some(q) if q == '\'' || q == '"' => {
-                                let mut quote = false;
-                                let mut term = false;
-                                while let Some(c) = r.next_char()? {
-                                    if !quote && c == q {
-                                        term = true;
-                                        break;
-                                    }
-                                    if c == '\\' {
-                                        if !quote {
-                                            quote = true;
-                                        }
-                                    } else {
-                                        quote = false;
-                                    }
-                                }
-                                if !term {
-                                    return Err(Error::Unspecified(line!()));
-                                } else {
-                                    r.next_char()?;
-                                }
-                            }
-                            Some(_) => {
-                                r.next_char()?;
-                            }
-                            None => {
-                                return Err(Error::Unspecified(line!()));
-                            }
-                        }
-                        if level == 0 {
-                            break;
-                        }
-                    }
-                    let p2 = r.position();
-                    Ok(ParseToken::new(ParseTerminal::Action, p1, p2))
-                }
-                _ => {
-                    let p1 = r.position();
-                    r.next_char()?;
-                    let p2 = r.position();
-                    Ok(ParseToken::new(ParseTerminal::BraceLeft, p1, p2))
-                }
+        Some('<') => {
+            if r.match_str("<%")? {
+                let p1 = r.position();
+                r.skip_char(2)?;
+                let p2 = r.position();
+                Ok(ParseToken::new(ParseTerminal::ActionStart, p1, p2))
+            } else {
+                Err(Error::Unspecified(line!())) //FIXME (jc) invalid character '<'
             }
+        }
+        Some('{') => {
+            let p1 = r.position();
+            r.next_char()?;
+            let p2 = r.position();
+            Ok(ParseToken::new(ParseTerminal::BraceLeft, p1, p2))
         }
         Some('}') => {
             let p1 = r.position();
