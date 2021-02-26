@@ -1,5 +1,5 @@
 [package]
-name = "kg-syntax-gen-test"
+name = "kg-syntax-test"
 version = "0.1.0"
 authors = ["jchlapinski <jakub.chlapinski@kodegenix.pl>"]
 edition = "2018"
