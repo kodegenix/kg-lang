@@ -135,7 +135,7 @@ impl GrammarRef {
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Cmd {
     Skip,
     More,
@@ -146,7 +146,7 @@ pub enum Cmd {
     Channel(usize),
     ChannelPush(usize),
     ChannelPop,
-    Custom(String),
+    Custom(Code),
 }
 
 
@@ -363,13 +363,22 @@ impl Ord for Production {
 
 
 #[derive(Debug)]
+pub enum Action {
+    None,
+    Assign(usize),
+    Collect(Vec<usize>),
+    Code(Code),
+}
+
+
+#[derive(Debug)]
 pub struct Rule {
     index: usize,
     id: String,
     production: usize,
     channels: Vec<usize>,
     symbols: Vec<Symbol>,
-    action: String,
+    action: Action,
     grammar: GrammarWeakRef,
 }
 
@@ -381,7 +390,7 @@ impl Rule {
             production,
             channels: Vec::new(),
             symbols: Vec::new(),
-            action: String::new(),
+            action: Action::None,
             grammar: grammar.weak_ref(),
         }
     }
@@ -410,7 +419,7 @@ impl Rule {
         &self.symbols
     }
 
-    pub fn action(&self) -> &str {
+    pub fn action(&self) -> &Action {
         &self.action
     }
 

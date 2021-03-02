@@ -59,7 +59,7 @@ pub fn parse(r: &mut dyn CharReader) -> Result<GrammarRef, Error> {
         let mut r0 = Rule::new(0, 0, &g);
         r0.symbols.push(Symbol::Production(1));
         r0.symbols.push(Symbol::Terminal(0));
-        r0.action.push_str("$$ = $1;");
+        r0.action = Action::Assign(1);
         rules.push(r0);
     }
 
@@ -411,7 +411,7 @@ fn parse_token(r: &mut dyn CharReader, ctx: ParseContext) -> Result<ParseToken, 
         Some('<') => {
             if r.match_str("<%")? {
                 let p1 = r.position();
-                r.skip_char(2)?;
+                r.skip_chars(2)?;
                 let p2 = r.position();
                 Ok(ParseToken::new(ParseTerminal::ActionStart, p1, p2))
             } else {
